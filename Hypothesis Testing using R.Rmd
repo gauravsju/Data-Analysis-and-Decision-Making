@@ -1,0 +1,260 @@
+---
+title: "Hypothesis Testing using R"
+author: "Jayendra Bhardwaj"
+---
+## Exercises
+
+Use the uswages data in the faraway package. Make sure you identify and eliminate the missing values in the exper variable.
+
+```{r}
+# load faraway
+library(faraway)
+
+# load data
+data("uswages")
+
+# manipulating data
+# we see that exper has neg. values
+uswages$exper[uswages$exper <0] <-NA
+
+# convert race, smsa, and pt to factor variables
+uswages$race <- factor(uswages$race)
+levels(uswages$race) <- c("White","Black")
+uswages$smsa <- factor(uswages$smsa)
+levels(uswages$smsa) <- c("No","Yes")
+uswages$pt <- factor(uswages$pt)
+levels(uswages$pt) <- c("No","Yes")
+
+# create region, a factor variable based on the four regions ne, mw, so, we
+uswages <- data.frame(uswages,
+                      region =
+                        1*uswages$ne +
+                        2*uswages$mw +
+                        3*uswages$so +
+                        4*uswages$we)
+uswages$region <- factor(uswages$region)
+levels(uswages$region) <- c("ne","mw","so","we")
+
+# delete the four regions ne, mw, so, we
+uswages <- subset(uswages,select=-c(ne:we))
+
+# Take care of NAs
+uswages <- na.omit(uswages)
+
+# Variable names
+names(uswages)
+```
+
+### 1. Exercise
+
+Run a model with region as predictor of wages. Show that the number of coefficients associated with region is 3.
+
+```{r}
+m.1 <- lm(wage~region, data = uswages)
+coef(m.1)
+```
+
+### 2. Exercise
+
+- Apply the `aggregate(wage ~ region, data = uswages, mean)` function in R to obtain the mean `wages` by `region`
+
+```{r}
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+```
+
+
+```{r}
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+m.1$coef[2]
+m.1$coef[1] + m.1$coef[2]
+```
+
+```{r}
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+m.1$coef[3]
+m.1$coef[1] + m.1$coef[3]
+```
+
+
+```{r}
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+m.1$coef[4]
+m.1$coef[1] + m.1$coef[4]
+```
+
+### 3. Exercise
+
+- Compare the two models:
+    + Model 1: wage ~ region
+    + Model 2: wage ~ region + educ + exper
+
+```{r}
+m.2 <- lm(wage~region+educ+exper, data = uswages)
+(tab7 <- anova(m.1, m.2))
+# Answer:
+# The F-Ratio 152 is big enough, so with p-value 3.03e-62 conclude that Model 2 is better, and therefore education and experience do matter.
+```
+
+- What is the conclusion - Model 1 or Model 2 is better? 
+
+- So do education and experience matter?
+
+### 4. Exercise
+
+- Compare the two models:
+    + Model 1: wage ~ educ + exper
+    + Model 2: wage ~ region + educ + exper 
+
+```{r}
+m.1a <- lm(wage~educ+exper, data = uswages)
+m.2 <- lm(wage~region+educ+exper, data = uswages)
+(tab8 <- anova(m.1a, m.2))
+# Answer:
+# The F-Ratio 2.4 is too small, so Model 1 is better with p-value 0.066 bigger than 0.05.
+# So the region of the country does not determine your wage given you already know education and experoence.
+```
+
+- The F-Ratio 2.4 is too small, so Model 1 is better with p-value 0.066 bigger than 0.05.
+
+- Using level of significance alpha=0.05, what is the conclusion: Model 1 or Model 2 is better? 
+
+- So does education and experience determine wage regardless of the region of the United States you live in, or does region still matter?
+
+#5. Exercise
+
+- Repeat exercise #4 using log(wage) for the outcome variable.
+
+- Compare the two models:
+    + Model 1: log(wage) ~ educ + exper
+    + Model 2: log(wage) ~ region + educ + exper 
+
+```{r}
+m.1a <- lm(log(wage)~educ+exper, data = uswages)
+m.2 <- lm(log(wage)~region+educ+exper, data = uswages)
+(tab9 <- anova(m.1a, m.2))
+# Answer:
+# The F-Ratio 1.29 is too small, with p-value 0.28 less than 0.05.
+# Conclude that region does not matter once you know education and experience.
+```
+
+- The F-Ratio 1.29 is too small, with p-value 0.28 less than 0.05.
+
+- Using level of significance alpha=0.05, what is the conclusion: Model 1 or Model 2 is better? 
+
+- So does education and experience determine wage regardless of the region of the United States you live in, or does `region` still matter?
+
+
+```{r}
+# Answers
+
+### 1. Exercise
+
+# Run a model with *region* as predictor of *wages*. Show that the number of coefficients associated with *region* is 3.
+
+
+m.1 <- lm(wage~region, data = uswages)
+coef(m.1)
+
+### 2. Exercise
+
+# - Apply the `aggregate(wage ~ region, data = uswages, mean)` function in R to obtain the mean `wages` by `region`
+# - Show that the average wage in the *northeast* is $b_0$.
+
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+
+# - Show that the average wage in the *midwest* is $b_0 + b_1$ dollars.
+
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+m.1$coef[2]
+m.1$coef[1] + m.1$coef[2]
+
+# - Show that the average wage in the *south* is $b_0 + b_2$ dollars.
+
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+m.1$coef[3]
+m.1$coef[1] + m.1$coef[3]
+
+# - Show that the average wage in the *west* is $b_0 + b_3$  dollars.
+
+aggregate(wage ~ region, data = uswages, mean)
+m.1$coef[1]
+m.1$coef[4]
+m.1$coef[1] + m.1$coef[4]
+
+### 3. Exercise
+
+# - Compare the two models:
+#     + Model 1: wage ~ region
+#     + Model 2: wage ~ region + educ + exper
+
+m.2 <- lm(wage~region+educ+exper, data = uswages)
+(tab7 <- anova(m.1, m.2))
+
+# Answer:
+# The F-Ratio 152 is big enough, so with p-value 3.03e-62 conclude that Model 2 is better, and therefore education and experience do matter.
+
+# - Show that the F-Ratio is 
+tab7[2, 5]
+# with p-value
+tab7[2, 6] 
+
+# - What is the conclusion - Model 1 or Model 2 is better? 
+# - So does education and experience matter?
+# - Yes they do.
+
+### 4. Exercise
+
+# - Compare the two models:
+#     + Model 1: wage ~ educ + exper
+#     + Model 2: wage ~ region + educ + exper 
+
+m.1a <- lm(wage~educ+exper, data = uswages)
+m.2 <- lm(wage~region+educ+exper, data = uswages)
+(tab8 <- anova(m.1a, m.2))
+# Answer:
+# The F-Ratio 2.4 is too small, so Model 1 is better with p-value 0.066 bigger than 0.05.
+# So the region of the country does not determine your wage given you already know education and experoence.
+
+# - Show that the F-ratio is 
+tab8[2, 5] 
+# with p-value equal to 
+tab8[2, 6] 
+# 
+# - Using level of significance $\alpha=0.05$, what is the conclusion: Model 1 or Model 2 is better? 
+# 
+# - So does education and experience determine wage regardless of the region of the United States you live in, or does region still matter?
+# - No region does not matter with alpha=0.05. But this is a close call, since the p-value is only a little bigger than 0.05.  
+
+### 5. Exercise
+
+# - Repeat exercise #4 using *log(wage)* for the outcome variable.
+
+# - Compare the two models:
+#     + Model 1: log(wage) ~ educ + exper
+#     + Model 2: log(wage) ~ region + educ + exper 
+
+m.1a <- lm(log(wage)~educ+exper, data = uswages)
+m.2 <- lm(log(wage)~region+educ+exper, data = uswages)
+(tab9 <- anova(m.1a, m.2))
+# Answer:
+# The F-Ratio 1.29 is too small, with p-value 0.28 less than 0.05.
+# Conclude that region does not matter once you know education and experience.
+
+# Show that the F-ratio is 
+tab9[2, 5]
+# with p-value equal to 
+tab9[2, 6]  
+
+# - Using level of significance $\alpha=0.05$, what is the conclusion: Model 1 or Model 2 is better? 
+# 
+# - So does education and experience determine wage regardless of the region of the United States you live in, or does `region` still matter?
+# - No region does not matter with alpha=0.05.
+```
+
