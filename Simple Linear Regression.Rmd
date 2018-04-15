@@ -1,0 +1,195 @@
+---
+title: "Simple Linear Regression and Visualization using R"
+author: "Jayendra Bhardwaj"
+---
+
+
+
+
+# Definition of a Statistical Linear Model - Simple Type
+
+Statistical models help study the relationship between input and output variables.
+
+In a Simple Linear Model, there is only one input value x, for each output value y. And they are related by a straight line equation with an error term.
+
+$$ y = \beta_0 + \beta_1  x + \epsilon $$
+
+Where $\beta_0$ is the _intercept_ and $\beta_1$ is the _slope_. The error is incorporated as an additive term, $\epsilon$.
+
+The parameters, intercept, $\beta_0$ and slope, $\beta_1$, are fixed constants; and the error term $\epsilon$ is random. 
+
+The intercept, slope, and error are unseen. 
+
+**Statistical theory is concerned about how best to estimate $\beta_0$, $\beta_1$, and the distribution of $\epsilon$**.  
+
+
+```{r}
+## Set the state for random number generation in R
+set.seed(123)
+
+# Pick the number of observations
+n <- 100
+
+# Pick the values for the intercept and the slope
+beta0 <- 10
+beta1 <- 2
+
+# Assume the error has a normal distribution
+# Pick the mean and standard deviation
+mu <- 0
+sigma1 <- 2.7
+
+# Pick the errors
+err1 <- rnorm(n, mean = mu, sd = sigma1)
+
+# Pick the observed inputs
+x <- 1:n/(n+1)
+
+# Generate the observed outputs
+yobs1 <- beta0 + beta1*x + err1
+
+# Repeat with a different error standard deviation
+sigma2 <- 0.7
+err2 <- rnorm(n, mean = mu, sd = sigma2)
+yobs2 <- beta0 + beta1*x + err2
+
+# Make a dataframe
+my_data <- data.frame(x, yobs1, yobs2)
+
+```
+
+# Install and activate ggplot2
+
+For a publishable plot of the data, the R package add-on called `ggplot2`, built by Dr. Hadley Wickham, implements a theory of data visualization based on the _Grammer of Graphics_. We need to fetch it from CRAN, and install it on our computer first. Then we need to make `ggplot2` available to our workspace session by putting it into the workspace library.
+
+```{r}
+install.packages("ggplot2", repos = "http://cran.r-project.org")
+library(ggplot2)
+```
+
+
+### Plotting the data
+
+A fancy plot of the data:
+
+```{r}
+p1 <- qplot(x, yobs1) + 
+  geom_abline(intercept = beta0, slope = beta1)
+p1
+```
+
+```{r}
+p2 <- qplot(x, yobs2) + 
+  geom_abline(intercept = beta0, slope = beta1)
+p2
+```
+
+```{r grid.arrange}
+library(grid)
+library(gridExtra)
+grid.arrange(p1, p2, ncol = 2, top = "Two plots with different error variances")
+```
+
+# Exercize 1. 
+
+**Different Error Standard Deviation**
+
+Generate new output observations using error standard deviation equal to $0.27$. Obtain plots of the new data as shown below.  Discuss the differences between all the plots.
+
+```{r}
+## Set the state for random number generation in R
+set.seed(123)
+
+# Pick the number of observations
+n <- 100
+
+# Pick the values for the intercept and the slope
+beta0 <- 10
+beta1 <- 2
+
+# Assume the error has a normal distribution
+# Pick the mean and standard deviation
+mu <- 0
+sigma1 <- 2.7
+sigma2 <- 0.7
+sigma3 <- 0.27
+
+# Pick the errors
+err1 <- rnorm(n, mean = mu, sd = sigma1)
+err2 <- rnorm(n, mean = mu, sd = sigma2)
+err3 <- rnorm(n, mean = mu, sd = sigma3)
+
+# Pick the observed inputs
+x <- 1:n/(n+1)
+
+# Generate the observed outputs
+yobs1 <- beta0 + beta1*x + err1
+yobs2 <- beta0 + beta1*x + err2
+yobs3 <- beta0 + beta1*x + err3
+
+# Make a dataframe
+my_data <- data.frame(x, yobs1, yobs2, yobs3)
+```
+
+```{r}
+library(ggplot2)
+p1 <- qplot(x, yobs1) + geom_abline(intercept = beta0, slope = beta1)
+p2 <- qplot(x, yobs2) + geom_abline(intercept = beta0, slope = beta1)
+p3 <- qplot(x, yobs3) + geom_abline(intercept = beta0, slope = beta1)
+```
+
+```{r}
+library(grid)
+library(gridExtra)
+grid.arrange(p1, p2, p3, ncol = 2, top = "Plots with different error variances")
+```
+
+```{r}
+# Answer:
+# As the standard error gets small the data appear to cluster around the true line tightly since the x range is the same in all the plots  
+```
+
+
+# Exercize 2. 
+
+**Different Input observations**
+
+Generate new output obvervations using error standard deviation equal to $2.7$, but input data range for $x$ with minimum $10$ and maximum $80$. Discuss the differences between all the plots. 
+
+```{r}
+# Pick the mean and standard deviation
+mu <- 0
+sigma4 <- 2.7
+
+# Pick the errors
+err4 <- rnorm(n, mean = mu, sd = sigma4)
+
+# Pick the observed inputs
+x <- 1:n/(n+1)
+x4 <- 10 + 70*x
+
+# Generate the observed outputs
+yobs4 <- beta0 + beta1*x4 + err4
+
+# Make a dataframe
+my_data <- data.frame(x, yobs1, yobs2, yobs3, x4, yobs4)
+```
+
+```{r}
+p4 <- qplot(x4, yobs4)
+p4 <- p4 + geom_abline(intercept = beta0, slope = beta1)
+```
+
+```{r}
+library(grid)
+library(gridExtra)
+grid.arrange(p1, p2, p3, p4, ncol = 2, top = "Plots with different error variances")
+```
+
+```{r}
+# Answer:
+# As the standard error gets small the data appear to cluster around the true line tightly since the x range is the same in three plots; but, in the plot with x4 the data also appears to cluster tightly even though the standard error is the same as the first plot. 
+# This appearence is caused by the bigger range for x4.
+```
+
+
