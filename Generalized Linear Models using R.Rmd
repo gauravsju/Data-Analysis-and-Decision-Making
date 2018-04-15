@@ -1,0 +1,547 @@
+---
+title: "Generalized Linear Models using R"
+author: "Jayendra Bhardwaj"
+---
+
+
+
+```{r}
+library("car")
+library("ggplot2")
+
+```
+
+```{r}
+# The "printr" package renders most all the table output in a nice format.
+library(printr)
+library("graphics")
+library("ggm")
+library("GGally")
+library("gpairs")
+```
+
+
+# Logistic Regression
+
+
+- Logistic regression is a method for fitting a regression curve, y = f(x), when y is a categorical variable. 
+
+    + The typical use of this model is predicting y given a set of predictors x.
+    
+    + The predictors can be continuous, categorical or a mix of both.
+
+- The categorical variable y, in general, can assume different values. 
+
+- In the simplest case scenario y is binary meaning that it can assume either the value 1 or 0.
+
+- A classical example used in machine learning is email classification: 
+
+    + given a set of attributes for each email such as number of words, links and pictures,
+    
+    + the algorithm should decide whether the email is spam (1) or not (0).
+    
+
+## Logistic regression implementation in R
+
+- R makes it very easy to fit a logistic regression model.
+
+- The function to be called is `glm()` and the fitting process is not so different from the one used in linear regression. 
+
+## The dataset
+
+Working on the Titanic dataset. 
+
+- There are different versions of this datasets freely available online, however I suggest to use the one available at [Kaggle](https://www.kaggle.com/c/titanic), since it is almost ready to be used (in order to download it you need to sign up to Kaggle).
+
+- The dataset (train) is a collection of data about some of the passengers (889 to be precise), and the goal of the competition is to predict the survival (either 1 if the passenger survived or 0 if they did not) based on some features such as the class of service, the sex, the age etc. 
+
+    + As you can see, we are going to use both categorical and continuous variables.
+
+    + The dataset (test) is about 400 observations more to be used to test the fitted model.
+
+## The data cleaning process
+
+- When working with a real dataset we need to take into account the fact that some data might be missing or corrupted, therefore we need to prepare the dataset for our analysis. 
+
+    + As a first step we load the csv data using the `read.csv()` function.
+
+    + Make sure that the parameter `na.strings` is equal to `c("")` so that each missing value is coded as a NA. This will help us in the next steps.
+
+```{r}
+training.data.raw <- read.csv('train.csv',header=T,na.strings=c(""))
+```
+
+- Now we need to check for missing values and look how many unique values there are for each variable using the `sapply()` function which applies the function passed as argument to each column of the dataframe.
+
+```{r}
+sapply(training.data.raw,function(x) sum(is.na(x)))
+```
+
+```{r}
+sapply(training.data.raw, function(x) length(unique(x)))
+```
+
+- A visual take on the missing values might be helpful: the `Amelia` package has a special plotting function `missmap()` that will plot your dataset and highlight missing values:
+
+```{r}
+library(Amelia)
+missmap(training.data.raw, main = "Missing values vs observed")
+```
+
+- The variable `cabin` has too many missing values, we will not use it. 
+
+- We will also drop `PassengerId` since it is only an index and `Ticket`.
+
+- Using the `subset` function we subset the original dataset selecting the relevant columns only.
+
+```{r}
+data <- subset(training.data.raw,select=c(2,3,5,6,7,8,10,12))
+```
+
+## Taking care of the missing values
+
+- Now we need to account for the other missing values. 
+
+- R can easily deal with them when fitting a generalized linear model by setting a parameter inside the fitting function. 
+
+- However, personally I prefer to replace the NAs ???by hand???, when is possible. 
+
+- There are different ways to do this: 
+
+    + but a typical approach is to replace the missing values with the average, the median or the mode of the existing one. 
+    + (I do not recommend this! Especially since extreme values of `age` may related to survival. Use the `mice` package to complete the data. DHJ)
+
+```{r}
+data$Age[is.na(data$Age)] <- mean(data$Age,na.rm=T)
+```
+
+- As far as categorical variables are concerned, using the `read.table()` or `read.csv()` by default will encode the categorical variables as factors. 
+
+- A factor is how R deals categorical variables.
+
+- We can check the encoding using the following lines of code
+
+```{r}
+is.factor(data$Sex)
+```
+
+```{r}
+is.factor(data$Embarked)
+```
+
+- For a better understanding of how R is going to deal with the categorical variables, we can use the `contrasts()` function. 
+
+- This function will show us how the variables have been dummyfied by R and how to interpret them in a model.
+
+```{r}
+contrasts(data$Sex)
+```
+
+```{r}
+contrasts(data$Embarked)
+```
+
+- For instance, you can see that in the variable `sex`, `female` will be used as the reference. 
+
+- As for the missing values in `Embarked`, since there are only two, we will discard those two rows (we could also have replaced the missing values with the mode and keep the datapoints).
+
+```{r}
+data <- data[!is.na(data$Embarked),]
+rownames(data) <- NULL
+```
+
+
+- Before proceeding to the fitting process, let me remind you how important is cleaning and formatting of the data. 
+
+- This preprocessing step often is crucial for obtaining a good fit of the model and better predictive ability.
+
+## Model fitting
+
+- We split the data into two chunks: training and testing set. 
+
+    + The training set will be used to fit our model which we will be testing over the testing set.
+
+```{r}
+train <- data[1:800,]
+test <- data[801:889,]
+```
+
+- Now, let???s fit the model. 
+
+- Be sure to specify the parameter `family=binomial` in the `glm()` function.
+
+```{r}
+model <- glm(Survived ~.,
+             family=binomial(link='logit'),
+             data=train)
+```
+
+By using function `summary()` we obtain the results of our model:
+
+```{r}
+summary(model)
+```
+
+## Interpreting the results of our logistic regression model
+
+- Now we can analyze the fitting and interpret what the model is telling us.
+
+- First of all, we can see that `SibSp`, `Fare` and `Embarked` are not statistically significant. 
+
+- As for the statistically significant variables, `sex` has the lowest p-value suggesting a strong association of the `sex` of the passenger with the probability of having survived. 
+
+- The negative coefficient for this predictor suggests that all other variables being equal, the male passenger is less likely to have survived.
+
+- Remember that in the logit model the [expected] response variable is log odds:  
+
+- Since `male` is a dummy variable, being male reduces the log odds by 2.75 while a unit increase in `age` reduces the log odds by 0.037.
+
+- Now we can run the `anova()` function on the model to analyze the table of deviance.
+
+```{r}
+anova(model, test="Chisq")
+```
+
+- The difference between the null deviance and the residual deviance shows how our model is doing against the null model (a model with only the intercept). 
+
+    + The wider this gap, the better. 
+
+- Analyzing the table we can see the drop in deviance when adding each variable one at a time. 
+
+- Again, adding `Pclass`, `Sex` and `Age` significantly reduces the residual deviance. 
+
+- The other variables seem to improve the model less even though `SibSp` has a low p-value. 
+
+- A large p-value here indicates that the model without the variable explains more or less the same amount of variation. 
+
+- Ultimately what you would like to see is a significant drop in deviance and the AIC.
+
+- While no exact equivalent to the $R^2$ of linear regression exists, the McFadden $R^2$ index can be used to assess the model fit.
+
+```{r}
+library(pscl)
+pR2(model)
+```
+
+## Assessing the predictive ability of the model
+
+- In the steps above, we briefly evaluated the fitting of the model, now we would like to see how the model is doing when predicting $y$ on a new set of data. 
+
+- By setting the parameter `type='response'`, R will output probabilities in the form of $P(y=1|X)$. 
+
+- Our decision boundary will be $0.5$ for created fitted values: 
+
+- Note that for some applications different thresholds could be a better option.
+
+```{r}
+fitted.results <- predict(model,newdata=subset(test,select=c(2,3,4,5,6,7,8)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+```
+
+```{r}
+misClasificError <- mean(fitted.results != test$Survived, na.rm = T)
+print(paste('Accuracy',1-misClasificError))
+```
+
+- The 0.84 accuracy on the test set is quite a good result. 
+
+- However, keep in mind that this result is somewhat dependent on the manual split of the data that I made earlier, therefore if you wish for a more precise score, you would be better off running some kind of cross validation such as k-fold cross validation.
+
+- As a last step, we are going to plot the ROC curve and calculate the AUC (area under the curve) which are typical performance measurements for a binary classifier.
+
+- The ROC is a curve generated by plotting the true positive rate (TPR) against the false positive rate (FPR) at various threshold settings while the AUC is the area under the ROC curve. 
+
+- As a rule of thumb, a model with good predictive ability should have an AUC closer to 1 (1 is ideal) than to 0.5.
+
+```{r}
+library(ROCR)
+p <- predict(model, newdata=subset(test,select=c(2,3,4,5,6,7,8)), type="response")
+pr <- prediction(p, test$Survived)
+```
+
+
+And here is the ROC plot:
+
+```{r}
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+```
+
+And here is the AUC (area under the curve):
+
+```{r}
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+
+
+# Generalized Linear Models: Extension to the linear model
+
+- Some useful extensions to Linear Models (LMs) include logistic regression for binary responses (0/1) and Poisson regression for counts ([Rodriguez]). 
+
+- All these models (normal, Bernoulli, Poisson) provide measures for fitted model deviance (error), and share a common prescription for model fitting. These procedures:
+
+    + are based on the maximization of a likelihood function ([Likelihood])
+    
+    + have their probability distributions belonging to the *exponential family* ([Jebara])
+    
+    + are special cases of  generalized linear models (GLMs) ([Bates]) 
+
+- In a Linear Model (LM), each element of the response vector $\boldsymbol{y}$ should unbounded and continuous. This requirement can be relaxed even if the responses have ordered categories with several levels. 
+
+- However, LMs will totally fail if the range of counts is small or if the responses are binary (0/1).
+
+- Estimates  can be negative or positive and unbounded, and may give unacceptable predictions for either binary or count data under certain conditions.
+
+Normal (Gaussian) probability model
+
+- In a model for continuous, unbounded data, each response $y$ follows a *Gaussian* probability distribution:
+
+
+**Bernoulli probability model**
+
+- Examples of binary data is the *CreditCard* dataset in the *AER R Package*.
+
+- In a model for binary data, each response $y$ follows a *Bernoulli* probability distribution:
+
+
+**Poisson probability model**
+
+- Examples of count data are the *Affairs* and *ShipAccidents* datasets in the *AER R Package*, and *heart* and *crabs* in the *glm2 R Package*.
+
+- In a model for count data, each response $y$ follows a *Poisson* probability distribution:
+
+
+# Generalized Linear Models Example: ice cream sales
+
+## The data
+
+Here is the example data set we will be using. It shows the units of ice creams sold at different temperatures. 
+
+```{r}
+icecream <- data.frame(
+  temp=c(11.9, 14.2, 15.2, 16.4, 17.2, 18.1, 
+         18.5, 19.4, 22.1, 22.6, 23.4, 25.1),
+  units=c(185L, 215L, 332L, 325L, 408L, 421L, 
+          406L, 412L, 522L, 445L, 544L, 614L)
+  )
+```
+
+A plot of the data:
+
+```{r}
+library(ggplot2)
+p <- qplot(temp, units, data = icecream)
+p
+```
+
+Using the ice cream sales data, we will fit four different models for the units sold $y_i$:
+
+- Normal Distribution using identity link function (LM)
+- Normal Distribution using logarithm link function (GLM)
+- Poisson Distribution (GLM)
+- Binomial Distribution (GLM)
+
+## Normal Response Model (LM)
+
+
+```{r}
+normal.lm <- lm(units ~ temp, data = icecream)
+p + geom_line(aes(temp, fitted(normal.lm)), color = "orange", size = 1)
+```
+
+- Looks reasonable for this range of temperature.
+
+- Let's see the predicted ice cream sales for cold and hot days.
+
+```{r}
+predicted <- data.frame(temp=c(0, 32))
+predicted$normal.lm <- predict(normal.lm, newdata=predicted) 
+predicted
+```
+
+- The value at 0 degrees would mean that the ice cream vendor is receiving 159 units from his customers!
+
+## Normal Response Model with log link (GLM)
+
+- To avoid the problem with the linear model at 0 degrees, we will constrain the model from going negative by using the log link function.
+
+```{r}
+log.normal.glm <- glm(units ~ temp, data = icecream, family = "gaussian"(link = "log"))
+p + geom_line(aes(temp, fitted(log.normal.glm)), color = "red", size = 1)
+```
+
+- Looks reasonable for this range of temperature.
+
+- Let's see the predicted ice cream sales for cold and hot days.
+
+- We must transform the predicted linked-model by the inverse link function.
+
+```{r}
+predicted$log.normal.glm <- exp(predict(log.normal.glm, newdata=predicted))
+predicted
+```
+
+- This approach clears up the negative values at 0 degrees.
+
+- These data are discrete data as the counts of units sold is the response variable, however, the normal probability distribution is appropriate only for continuous response.
+
+- There is a better model for count data.
+
+## Poisson Response Model (GLM)
+
+- This model will preserve the positive range for the response and be more appropriate for count data.
+
+- Let's see the predicted ice cream sales for cold and hot days.
+
+- We must transform the predicted linked-model by the inverse link function.
+
+```{r}
+predicted$pois.glm <- exp(predict(pois.glm, newdata=predicted))
+predicted
+```
+
+- These predictions are reasonable.
+
+- However, an assumption that the Poisson model makes is that the number of ice cream units that can be sold is unbounded, or as we might say "infinite".
+ 
+## Binomial Response Model (GLM)
+
+- Let's assume that the number of ice cream units that can be sold on any given day is $n=800$.
+
+- A reasonable model is that ice cream sales on a particular day are approximated by the number of heads in tossing a coin $n$ times, where the probability of a head is some unknown value $p$ that depends on the temperature on that day.
+
+- The approximation is the Binomial probability distribution with the logit link function of $p$.
+- The Binomial glm procedure can be applied with a "two-column" response function.
+
+- We create the "two-column" response from the number of units sold and the number of units that could have been sold out of $n$.
+
+```{r}
+market.size <- 800
+icecream$opportunity <- market.size - icecream$units
+bin.glm <- glm(cbind(units, opportunity) ~ temp, data=icecream, 
+    family=binomial(link = "logit"))
+p + geom_line( aes(temp, market.size*fitted(bin.glm)), color = "purple", size = 1)
+```
+
+- Let's see the predicted ice cream sales for cold and hot days.
+
+- We must transform the predicted linked-model by the inverse link function and then multiply by $n$.
+
+```{r}
+predicted$bin.glm <- market.size*plogis((predict(bin.glm, newdata=predicted)))
+predicted
+```
+
+- The Binomial predicted sales units look very reasonable given the assumptions.
+
+## Summary graph of all response models
+
+- All on one graph.
+
+```{r }
+xmin <- 0
+xmax <- 32
+
+predicted <- data.frame(temp = seq(xmin, xmax, length.out = 100))
+predicted$normal.lm <- predict(normal.lm, predicted)
+predicted$log.normal.glm <- exp(predict(log.normal.glm, predicted))
+predicted$pois.glm <- exp(predict(pois.glm, predicted))
+predicted$bin.glm <- market.size*plogis(predict(bin.glm, predicted))
+
+p + geom_line(aes(temp, normal.lm), data = predicted, color = "orange", size = 1) + 
+  geom_line(aes(temp, log.normal.glm), data = predicted, color = "red", size = 1) + 
+  geom_line(aes(temp, pois.glm), data = predicted, color = "blue", size = 1) + 
+  geom_line(aes(temp, bin.glm), data = predicted, color = "purple", size = 1) 
+```
+
+
+
+# Generalizied Linear Models Example: crab data (Poisson) and heart attack data (Binomial)
+
+- We study two datasets, `crabs` and `heart`.
+
+
+
+## Logistic Regression for Heart Attack Data
+
+```{r}
+library(glm2)
+data(heart, package = "glm2")
+```
+
+```{r}
+help(heart, package = glm2)
+```
+
+```{r}
+head(heart)
+```
+
+
+```{r}
+fit <- glm(
+  cbind(Deaths, Patients-Deaths) 
+  ~ factor(AgeGroup)
+  + factor(Severity)
+  + factor(Delay) 
+  + factor(Region), 
+  data = heart,
+  family = binomial(link="logit")
+)
+```
+
+```{r}
+summary(fit)
+```
+
+```{r}
+plot(fit)
+```
+
+- There appears to be a few outliers, and a more detailed analysis would study these.
+
+```{r}
+step(fit)
+```
+
+- No  variables are eliminated with stepwise regression.
+
+## Poisson Regression for Horseshoe Crab Data
+
+```{r}
+help(crabs, package = glm2)
+```
+
+```{r}
+data(crabs, package = "glm2")
+head(crabs)
+```
+
+- Log link Poisson
+
+```{r}
+crabs$width.shifted <- crabs$Width - min(crabs$Width)
+fit <- glm(
+  Satellites 
+  ~ width.shifted 
+  + factor(Dark) 
+  + factor(GoodSpine),
+  data = crabs,
+  family = poisson(link="log"), 
+  start = rep(1,4)/2
+  )
+```
+
+
+```{r}
+summary(fit)
+```
+
+```{r}
+plot(fit)
+```
+
+
