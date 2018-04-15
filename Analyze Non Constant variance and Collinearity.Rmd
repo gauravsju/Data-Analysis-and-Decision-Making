@@ -1,0 +1,951 @@
+---
+title: " Analyze Nonconstant variance, non-normal errors, Model Structure and Collinearity "
+author: "Jayendra Bhardwaj"
+
+---
+
+Guide to the material 
+
+In the following we will present several diagnostic tools for detecting departures from the standard assumptions. 
+
+Anscombe's Quartet data
+
+We begin by reviewing Anscombe's Quartest Data which precisely lays out the problems encountered with ordinary regression modeling. 
+
+#Checking for nonconstant variance
+
+We re-introduce the (now familiar) residuals vs fiited plot and it's cousin, the scale - location plot, which are useful for detecting nonconstant error variance. 
+We present an F-test for detecting non-constant variance.
+
+#Checking for non-normal errors
+
+We also re-introduce the Normal Q-Q Plot and the Shaprio-Wilk test, which are extremely useful for detecting non-normality in the errors.
+
+We present the Box-Cox Power Transform of the output variable for making the errors normal with constant variance.
+
+#Checking for influential outliers
+
+Next we address outliers. Many times, the outliers are influential: They ruin the normality of errors and distort the estimate of the model. 
+
+We visualize outliers in the data by using 3D graphics. 
+
+For data with higher dimension, we present the leverage index and Cook's D index for identifying influential outliers. 
+
+#Checking for correct model specification
+
+Next we introduce the added variable plot, partial residual plot, and the CERES plot for identifying model miss-specification.
+
+#Interaction Models
+
+The CERES plot can also reveal data subgroups which can be handeled with a interaction model. So we digress to present the interaction model for fitting subgroups of data. 
+
+# Checking for collinearity in predictors
+
+Finally we discuss collinearity of predictor varables. 
+
+We put off to the next lecture on the best ways for dealing with the anomalies.
+
+#### R resources
+
+We use the following R libraries:
+
+```{r}
+library("faraway")
+library("car")
+library("ggplot2")
+library("gridExtra")
+library("scatterplot3d")
+library("rgl")
+```
+
+We use the following R option:
+
+```{r}
+options(show.signif.stars=FALSE, digits=3)
+options(scipen=10)
+```
+
+
+
+# Anscombe's Quartet data
+
+Anscombe configured four (quartet) artificial data sets in the 1960's to illustrate problems with traditional regression methods.
+
+The sets of data consists of one regular behaving dataset and three ill-behaving datasets that, except upon visual inspection, look perfectly normal.
+
+
+```{r}
+data(Quartet)
+names(Quartet)
+```
+
+
+- y1 is "nice" data, but y2, y3, and y4 yield exactly the same estimate and standard error as the "nice" data when by fitting a simple linear midel in all four
+
+We will see:
+
+- y2 comes from a quadratic model, an example of model mispecification
+- y3 has an outlier
+- y4 has a highly leveraged point
+
+
+Fit a simple liner model in all four datasets.
+
+```{r}
+g1 <- lm(y1 ~ x, Quartet)
+g2 <- lm(y2 ~ x, Quartet)
+g3 <- lm(y3 ~ x, Quartet)
+g4 <- lm(y4 ~ x4, Quartet)
+```
+
+
+Plot datasets with the fitted line.
+
+```{r}
+library(gridExtra)
+p1 <- qplot(x, y1, data = Quartet) + geom_smooth(method = "lm", se = FALSE) + ylim(4,13)
+p2 <- qplot(x, y2, data = Quartet) + geom_smooth(method = "lm", se = FALSE) + ylim(4,13)
+p3 <- qplot(x, y3, data = Quartet) + geom_smooth(method = "lm", se = FALSE) + ylim(4,13)
+p4 <- qplot(x4, y4, data = Quartet) + geom_smooth(method = "lm", se = FALSE) + ylim(4,13)
+grid.arrange(p1,p2,p3,p4, nrow = 2)
+```
+
+
+
+Compare LS estimates and the standard errors of estimate.
+
+```{r}
+compareCoefs(g1, g2, g3, g4)
+```
+
+Conclusion:
+
+- The fitted lines have exactly the same intercept and slope for each of the four datasets
+- The standard errors of estimate are also the same
+- Plots of the datasets are quite different!
+- Take-away-1: Never go on the estimates and standard errrors of least squares results alone, must also visualize the data
+- Take-away-2: In processing large datasets, or many datasets, or datasets with large numbers of variables, it may not be efficent to visualize the data, therefore there is need to to replace least squares with a robust method that will not will not be influenced by outliers or be restricted by a linear model
+
+
+
+# Checking for nonconstant variance
+
+## Residual Plots
+
+- We plot residuals and absolute values of residuals versus predicted values in the savings dataset.
+
+```{r}
+data("savings")
+g <- lm(sr ~ pop15 + pop75 + dpi + ddpi, savings)
+mod <- fortify(g)
+p1 <- qplot(.fitted, .resid, data = mod) +  geom_hline(yintercept = 0, linetype = "dashed") + labs(title = "Residuals vs Fitted", x ="Fitted", y ="Residuals") + geom_smooth(color = "red", se = F)
+p2 <- qplot(.fitted, abs(.resid), data = mod) +  geom_hline(yintercept = 0, linetype = "dashed") + labs(title = "Scale-Location", x ="Fitted", y ="|Residuals|") + geom_smooth(method = "lm" ,color = "red", se = F)
+grid.arrange(p1, p2, nrow = 2)
+```
+
+- We have seen the Residual vs Fitted plot before where we have used it to detect outliers, here we use it also to detect patterns in residuals that would indicate nonconstant error variance.
+
+- The second plot is called the Scale-Location plot, which strengthens the pattern in the residuals by ploting the absolute values.
+
+- In both plys, we some evidence of heterskedasticity, in other words nonconstant error variance.
+
+- In the Residual vs Fitted plot, we have added a "nonparametric" fitted line called loess which stands for locally weighted scatterplot smoothing. 
+
+- Other GGplot method (function) available are lm, glm, gam, loess, rlm. For datasets with n < 1000 default is loess. 
+
+- We used the lm method for the Scale-Location plot. We see that the downward sloping line strengthens our suspicion of nonconstant error variance.
+
+#An approximate test of noncontant error variance.
+
+```{r}
+summary(lm(abs(residuals(g)) ~ fitted(g)))
+```
+
+- We look at the t-test for the slope coefficient with null hypthesis that the slope is zero. At the 10% level of significance, we conclude that the slope is not zero since the p-value, 0.09250, is less than 0.10
+
+- This test is only approximate as the degrees of freedom number for the t-distribution, 48, is theorectically too large.
+
+# An F test for nonconstant error variance between two groups defined by a predictor
+
+- This test is similar to the Breusch-Pagan test of heteroskedastitcity
+
+- We devide the residuals into two groups: pop15>35 and pop15<35.
+
+```{r}
+group <- savings$pop15>35
+p1 <- qplot(pop15, .resid, data = mod, color=group)
+p2 <- qplot(group, .resid, data = mod, geom = "boxplot")
+grid.arrange(p1, p2, nrow = 2)
+var.test(residuals(g)[savings$pop15>35], residuals(g)[savings$pop15<35])
+```
+
+- The boxplot clearly indicates that the residuals' variance of group pop15 < 35 is larger than the variance of group pop15 > 35
+
+- The F-test compares the sample variances of the residuals of the two groups, with null hypothesis that the two variances are equal.
+
+- We conclude that there is difference in the variance between these two groups with level of significance 10% since the p-value, 0.01, is less than 0.10.
+
+
+## A variance stabilizing transformation
+
+- Sometimes it is difficult to determine which transformation to use
+
+- Try one, if is not effective try the other
+
+- Add a constant in the transform to make all values positive
+
+# Using the gala data
+
+- We use the `gala` data for the illustration of the method using the `sqrt()` transform
+
+- Not that `Elevation` and `Adjacent` are the two very significant predictors.
+
+```{r}
+data("gala")
+gg <- lm(Species ~ Area + Elevation + Scruz + Nearest + Adjacent, gala)
+gs <- lm(sqrt(Species) ~ Area + Elevation + Scruz + Nearest + Adjacent, gala)
+modgg <- fortify(gg)
+modgs <- fortify(gs)
+p1 <- qplot(.fitted, .resid, data = modgg) +  geom_hline(yintercept = 0, linetype = "dashed") + labs(title = "Residuals vs Fitted", x ="Fitted", y ="Residuals") + geom_smooth(color = "red", se = F)
+p2 <- qplot(.fitted, abs(.resid), data = modgg) +  geom_hline(yintercept = 0, linetype = "dashed") + labs(title = "Scale-Location", x ="Fitted", y ="|Residuals|") + geom_smooth(method = "lm" ,color = "red", se = F)
+p3 <- qplot(.fitted, .resid, data = modgs) +  geom_hline(yintercept = 0, linetype = "dashed") + labs(title = "Residuals vs Fitted", x ="Fitted", y ="Residuals") + geom_smooth(color = "red", se = F)
+p4 <- qplot(.fitted, abs(.resid), data = modgs) +  geom_hline(yintercept = 0, linetype = "dashed") + labs(title = "Scale-Location", x ="Fitted", y ="|Residuals|") + geom_smooth(method = "lm" ,color = "red", se = F)
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+```
+
+- We perform the approximate test of heteroskedasticity on the transformed data.
+
+```{r}
+summary(lm(abs(residuals(gs)) ~ fitted(gs)))
+```
+
+- Conclusion: The t-test does not reject constant error variance with a level of significance 10%, since the p-value, 0.3292, is greater than 0.10.
+
+# Checking for non-normal errors
+
+## Normal QQ-plots for detecting nonnormality
+
+- Keeping with the `gala` data we check the residuals for normality using the Normal QQ-plot first on the untransformed model `gg`, then on the sqrt-transformed model `gs`.
+
+```{r}
+p1 <- qplot(sample = scale(.resid), data = modgg) + geom_abline(intercept = 0, slope = 1, color = "red") + labs(title = "Untransformed y", y = "Residuals")
+p2 <- qplot(sample = scale(.resid), data = modgs) + geom_abline(intercept = 0, slope = 1, color = "red") + labs(title = "Sqrt-Tranformed y", y = "Residuals")
+grid.arrange(p1, p2, nrow = 2)
+```
+
+- The transformed model looks better to me.
+
+## Hisograms, kernal density plots
+
+- We can also have a look at the histogram of the residuals with overlays of the kernal density estimator and the standard normal density.
+
+- The histogram of the residuals alone is not suitable for detecting nonnormality.
+
+- However the kernal density estimator compared to the normal density indicates that the residuals could be nonnormal.
+
+```{r}
+p1 <- qplot(scale(.resid), data = modgg, geom = 'blank') +   
+  geom_line(aes(y = ..density.., colour = 'Empirical'), stat = 'density') +
+  stat_function(fun = dnorm, aes(colour = 'Normal')) +
+  geom_histogram(aes(y = ..density..), alpha = 0.4) + 
+  scale_colour_manual(name = 'Density', values = c('red', 'blue')) + 
+  theme(legend.position = c(0.85, 0.85)) + labs(title = "Untransformed y", y = "Residuals")
+p2 <- qplot(scale(.resid), data = modgs, geom = 'blank') +   
+  geom_line(aes(y = ..density.., colour = 'Empirical'), stat = 'density') +
+  stat_function(fun = dnorm, aes(colour = 'Normal')) +
+  geom_histogram(aes(y = ..density..), alpha = 0.4) + 
+  scale_colour_manual(name = 'Density', values = c('red', 'blue')) + 
+  theme(legend.position = c(0.85, 0.85)) + labs(title = "Sqrt-Tranformed y", y = "Residuals")
+grid.arrange(p1, p2, nrow = 2)
+```
+
+- Clearly the residuals of the untransformed model are not normal.
+
+- The residuals of the sqrt-tranformed model look better, but may not be normal.
+
+## The Shapiro-Wilk test of normality
+
+- Here we test the normality of residuals for model using the *gala* dataset
+
+- First we test the untransformed model `gg`, followed by the sqrt-transformed model `gs`.
+
+```{r}
+shapiro.test(residuals(gg))
+shapiro.test(residuals(gs))
+```
+
+- We reject the null hypothesis of normality for the residuals of sqrt-transformed model with level of significance 10% since the p-value is less than 0.10.
+
+- We accept the null hypothesis of normality for the residuals of sqrt-transformed model with level of significance 10% since the p-value is greater than 0.10.
+
+- The [Shapiro-Wilk] test is essentially based on the Pearson correlation between the residuals and the normal quantiles, called $W$, which is equal to $0.914$ and $0.959$ for the untransformed and sqrt-transformed models respectively.
+
+## Box-Cox Power Transform
+
+- The sqrt transform is a member of the family of Box-Cox power tranforms. The transform is 
+
+- With limit $log(y)$ as $\lambda\rightarrow0$.
+
+- We can find the power that minimizes the distance between the residuals and the qqline in the QQ-plot, using an R function from the *car package*.
+
+```{r}
+library(car)
+(lambda <- powerTransform(gg))
+```
+
+- Here we use the Box-Cox power transform on the gala dataset.
+
+```{r}
+lam <- lambda$lambda
+glam <- lm(Species^lam ~ Area + Elevation + Scruz + Nearest + Adjacent, gala)
+modlam <- fortify(glam)
+p1 <- qplot(sample = scale(.resid), data = modgs) + geom_abline(intercept = 0, slope = 1, color = "red") + labs(title = "Normal QQ-Plot", y = "Residuals Sqrt-transformed")
+p2 <- qplot(sample = scale(.resid), data = modlam) + geom_abline(intercept = 0, slope = 1, color = "red") + labs(title = "Normal QQ-Plot", y = "Residuals Box-Cox-Transform")
+grid.arrange(p1, p2, nrow  = 1)
+```
+
+- The Shapiro-Wilk test concludes that the errors *are normal* for the Box-Cox Transform of *species* with level of significance 10% since the p-value, 0.65, is greater than 0.10.
+
+```{r}
+shapiro.test(residuals(glam))
+```
+
+# Checking for influential outliers
+
+## 3D Scatterplot
+
+- This is the R Code for static 3D scatterplots of the *gala* data.
+
+```{r}
+library("scatterplot3d")
+attach(gala)
+
+s3d <- scatterplot3d(Elevation,Adjacent,Species, 
+                     pch=16, 
+                     highlight.3d=TRUE, 
+                     type="h", 
+                     main="3D Scatterplot")
+fit <- lm(Species ~ Elevation + Adjacent)
+s3d$plane3d(fit)
+
+s3d <- scatterplot3d(Elevation,Adjacent,Species^lam, 
+                     pch=16, 
+                     highlight.3d=TRUE, 
+                     type="h", 
+                     main="3D Scatterplot")
+fit <- lm(Species^lam ~ Elevation + Adjacent)
+s3d$plane3d(fit)
+
+detach(gala)
+```
+
+
+- Clearly the Box-Cox transformed `Species' reveals the data better for small values of `Elevation` and `Adjacent`.
+
+- Notice the datapoint far away with the largest value of `Adjacent`, it look like it is "pulling" the fitted plane over to it.
+
+## 3D Spin-Plot
+
+- Spinning the 3D Scatterplot is better for detecting outliers and influential points than the static scatterplots alone.
+
+- Run this code in the RStudio console to see the movie for the *gala* data.
+
+- Pay attention to the datapaoint with largest `Adjacent` value.
+
+- What is your conclusion?
+
+```{r}
+library("faraway")
+library("rgl")
+data("gala")
+attach(gala)
+plot3d(Elevation,Adjacent,Species^lam, 
+       col="red", 
+       size=3)
+play3d(spin3d(axis = c(0, 0, 1)))
+detach(gala)
+```
+
+## The leverage measure for detecting influential outliers
+
+- The data visualization methods we have seen so far are too inefficient for production methods. Now we look at some statistics that can be employed for automatic detection of data anomalies.
+
+- We have several graphical displays using leverage, using the gala data as example:
+
+```{r}
+library("faraway")
+influencePlot(glam)
+islands <- row.names(gala)
+halfnorm(lm.influence(glam)$hat, labs=islands, ylab="Leverages")
+```
+
+### New dataset star
+
+- To see how high leverage observation can distort OLS, we use a new dataset *star* in the faraway package. 
+
+- The light and temperature of stars from a cluster in the direction of the Cygnus constellation.
+
+- These data have influential outliers visible with just a scatterplot.
+
+```{r}
+library(faraway)
+data(star)
+p <- qplot(star$temp, star$light, 
+     xlab="log(Temperature)", 
+     ylab="log(Light Intensity)")
+p
+```
+
+- The LS fitted line with outliers included in the data:
+
+```{r}
+ga <- lm(light~temp, star)
+p <- p + geom_smooth(method="lm", se=F)
+p
+```
+
+- The LS fitted line with outliers excluded from the data, the green line.
+
+- Clearly the outliers pull the OLS line toward them.
+
+```{r}
+gb <- lm(light~temp, star, subset=(temp>3.6))
+p + geom_abline(intercept=coef(gb)[1], slope=coef(gb)[2], colour="green")
+```
+
+- We shall return to the *star* data after we introduce some methods for handling ouliers.
+
+## Cook's Distance for detecting influential outliers
+
+- Cook's Distance measures how much each datapoint changes the fitted value as if it were deleted from the dataset. 
+
+- It appears that the calculations require refitting the model $n$ times as the removed datapoint transits over the entire dataset. 
+
+
+- Using the savings data, we caclulate the Cook's Distance for each datapoint. 
+
+```{r}
+cook <- cooks.distance(glam)
+```
+
+- Half normal plot of Cook's Distance with labels of three largest values.
+
+```{r}
+halfnorm(cook,3,labs=islands,ylab="Cook's distance")
+```
+
+
+- Model fit excluding observation with largest Cook's Distance.
+
+```{r}
+glam1 <- lm(Species^lam ~ Area + Elevation + Scruz + Nearest + Adjacent, data = gala, subset=(cook < max(cook)))
+```
+
+- Comparison of model fitted coefficents with and without the worst influential observation.
+
+```{r}
+compareCoefs(glam, glam1)
+```
+
+## The omnibus diagnostic plot function
+
+- So far we have introduced several plots for detecting nonconstant error variance, departures from normality, high leverage and high Cook's Distance points.
+
+- A quick and dirty way to get several plots at once is the `plot` function.
+
+```{r}
+oldpar <- par(mfrow=c(2,2))
+# plot(g, main = "Savings Data")
+# plot(ga, main = "Star Data")
+plot(glam, main = "Gala Data")
+par(oldpar)
+```
+
+
+
+
+# Checking for correct model specification
+
+## Checking if nonconstant variance is related to a predictor.
+
+- Plots of residuals versus predictors are called linear residual plots.
+
+```{r}
+par(mfrow=c(1,2))
+plot(savings$pop15, residuals(g), xlab="Population under 15", ylab="Residuals")
+plot(savings$pop75, residuals(g), xlab="Population over 75", ylab="Residuals")
+par(mfrow=c(1,1))
+```
+
+- We clearly see two clusters of data in "Population under 15" plot. We shall show how to fit this data using an interaction model.
+
+- Dennis Cook has presented examples showing that linear residual plots fail to detect heteroskedasticity and nonlinerairty. 
+
+- We will learn to use Dennis Cook's CERES plots in place of these plots, after we learn how to "purify" the residuals. 
+
+# Added variable plot for checking model structure
+
+- Model structure concerns the type of model or the transformations of predictors. We have already discussed tranformations of predictors. Other types of models could include polynomial models involving the continous predictors.
+
+- For example, in the savings data, we can check if sr and pop15 are related by some other relation than a straight line.
+
+- To do this we use the special residuals from these fits:
+
+    + Fit sr on all variables except pop15
+    
+    + Fit pop15 on all the other predictors
+
+- Then we examine the relation between these two sets of residuals.
+
+```{r}
+d <- residuals(lm(sr~pop75+dpi+ddpi,savings))
+m <- residuals(lm(pop15~pop75+dpi+ddpi,savings))
+qplot(m,d,xlab="pop15 residuals", ylab="savings residuals") + geom_smooth(method="lm", colour="red", linetype=2, se=FALSE) + geom_smooth(method="loess", colour="green", se=FALSE)
+```
+
+- The "green" curve is a model-free (nonparametric) fit.
+
+- Since it is close to the straight line, it indicates that *pop15* does not need to be transformed or that its square does not need to be added to the model.
+
+- The slope of the straight line is the same as the coeficient in the full model
+
+```{r}
+compareCoefs(lm(d~m),g)
+```
+
+- LOESS and LOWESS (locally weighted scatterplot smoothing) are two strongly related non-parametric regression methods that combine multiple regression models in a k-nearest-neighbor-based meta-model. See https://en.wikipedia.org/wiki/Local_regression
+
+## Partial residual plot for checking model structure
+
+- The *partial-residual plot* is prefered to the *added variable plot*.
+
+- It uses an *adjusted* response, as seen in the following R code.
+
+- The partial-residual plot is sometimes call the *componenet + residual* plot.
+
+```{r}
+plot(savings$pop15,
+     coef(g)['pop15']*savings$pop15 +
+       residuals(g), 
+     xlab="pop'n under 15",
+     ylab="Savings(Adjusted)")
+```
+
+- Two easy ways to get the added variable plot
+
+1. The *partial-residual plot*
+
+```{r}
+library(faraway)
+par(mfrow=c(2,2))
+prplot(g,1) # pop15
+prplot(g,2) # pop75
+prplot(g,3) # dpi
+prplot(g,4) # ddpi
+par(mfrow=c(1,1))
+```
+
+
+2. CERES plot (Combined Conditional Expectations and RESiduals plot) 
+
+- Ceres plots are a generalization of component+residual (partial residual) plots that are less prone to leakage of nonlinearity among the predictors.
+
+```{r}
+library(car)
+ceresPlots(g, terms= ~ .)
+```
+
+- This plot is due to Dennis Cook.
+
+- It is easier to specify then the prplot function in the faraway package since plots are generated automatically for all the predictors.
+
+- Once again the two clusters are evident in the savings data.
+
+- No evidence for transforms or higher order terms (polynomial model).
+
+- Let's try the CERES Plot on the Gala Data
+
+```{r}
+# modlam <- fortify(glam)
+summary(gg)
+ceresPlots(gg, terms = ~ .)
+```
+
+- Let's try adding `Elevation^2` to the model
+
+- Since we have an influential observation, we shall fit with and without the observation. This is important for quadratic and other polynomial models.
+
+```{r}
+gg2 <- lm(Species ~ Area + Elevation + I(Elevation^2) + Scruz + Nearest + Adjacent, 
+    data = gala)
+cook <- cooks.distance(gg2)
+gg2c <- lm(Species ~ Area + Elevation + I(Elevation^2) + Scruz + Nearest + Adjacent, 
+    data = gala, subset = (cook < max(cook)))
+compareCoefs(gg2, gg2c)
+```
+
+
+# Interaction Models
+
+## Dealing with clusters
+- Since our new graphical tools have revealed a cluster structure in the savings data, we take this opportunity to introduce the interaction model.
+
+- We have seen interections before, but just never talked about them, for instance in the uswages data.
+
+- Let's consider savings first.
+
+```{r}
+g1 <- lm(sr~pop15+pop75+dpi+ddpi,savings, subset=(pop15>35))
+g2 <- lm(sr~pop15+pop75+dpi+ddpi,savings, subset=(pop15<35))
+compareCoefs(g1, g2)
+```
+
+- Clearly we see the slope coefficient for pop15 are of opposite sign between the two groups. 
+
+```{r}
+savings$group <- (savings$pop15 > 35)
+p <- qplot(pop15, sr, data = savings) 
+p <- p + facet_grid(. ~ group, scales = "free")
+p + geom_smooth(method="lm", se=F)
+```
+
+
+- We fit models on two separate groups in the above example, fitting models for the separate groups is not a good idea since the dataset sizes are small.
+
+- The proper way is to will create a new dummy variable which is a factor indentifying the group.
+
+- The advantage over separate group fitting is that the error variance is better estimated with the full dataset.
+
+
+## Interaction model for savings data
+
+- Interaction models are useful for fitting separate models to subgroups of data.
+
+- We will create a factor for the two groups: (pop15 < 35), (pop15 > 35), we call it `dummy` and add it to the `savings` dataframe.
+
+```{r}
+savings$dummy <- factor(savings$pop15<35)
+```
+
+- The fitted interaction model:
+
+```{r}
+g_interaction <- lm(sr ~ pop75 + 
+                      dpi + 
+                      ddpi + 
+                      dummy +
+                      pop15*dummy, savings)
+```
+
+- Does the interaction model do a better job predicting savings rate?
+
+```{r}
+anova(g,g_interaction)
+```
+
+- What is the P-value, and what model does it indicate?
+
+
+
+# Checking for collinearity in predictors
+
+- We use the seatpos dataset
+
+```{r}
+library("faraway")
+data(seatpos)
+# ?seatpos
+# help(seatpos)
+```
+
+## Car seat position depending driver size
+
+### Description
+
+Car drivers like to adjust the seat position for their own comfort. Car designers would find it helpful to know where different drivers will position the seat depending on their size and age. Researchers at the HuMoSim laboratory at the University of Michigan collected data on 38 drivers.
+
+### Usage
+
+data(seatpos)
+
+### Format
+
+The dataset contains the following variables
+
+Age
+
+- Age in years
+
+Weight
+
+- Weight in lbs
+
+HtShoes
+
+- Height in shoes in cm
+
+Ht
+
+- Height bare foot in cm
+
+Seated
+
+- Seated height in cm
+
+Arm
+
+- lower arm length in cm
+
+Thigh
+
+- Thigh length in cm
+
+Leg
+
+- Lower leg length in cm
+
+hipcenter
+
+- horizontal distance of the midpoint of the hips from a fixed location in the car in mm
+
+### Source
+
+"Linear Models in R" by Julian Faraway, CRC Press, 2004
+- Signs of collinearity
+
+- The F test is highly significant and R-square is substantial, but none of the coefficents are significant
+
+```{r}
+g <- lm(hipcenter~.,seatpos)
+summary(g)
+```
+
+- The correlation matrix detects pairwise collinearity
+
+```{r}
+round(cor(seatpos),1)
+```
+
+### The Variance Inflation Factor (VIF)
+
+```{r}
+library(car)
+vif(g)
+```
+
+- Look for vif > 10
+
+- A solution: Amputate some predictors from the model
+
+```{r}
+g1 <- lm(hipcenter~Age+Weight+Ht, seatpos)
+summary(g1)
+anova(g1, g)
+```
+
+### Conclusion
+- The small model is not rejected with a significance level of 10% since the p-value, 0.73, is greater than 0.10.
+- The small model $(p=4)$ is more stable with  an $R^2$ of 0.656 compared to $R^2$ of 0.687 from the fit of the big model $(p=9)$.
+
+# Exercises
+
+## uswages
+Use the `uswages` data in the `faraway` package. Make sure you identify and eliminate the missing values in the `exper` variable.
+
+```{r}
+# load data
+library("faraway")
+data("uswages")
+
+# manipulating data
+# we see that exper has neg. values
+uswages$exper[uswages$exper <0] <-NA
+
+# convert race, smsa, and pt to factor variables
+uswages$race <- factor(uswages$race)
+levels(uswages$race) <- c("White","Black")
+uswages$smsa <- factor(uswages$smsa)
+levels(uswages$smsa) <- c("No","Yes")
+uswages$pt <- factor(uswages$pt)
+levels(uswages$pt) <- c("No","Yes")
+
+# create region, a factor variable based on the four regions ne, mw, so, we
+uswages <- data.frame(uswages,
+                      region =
+                        1*uswages$ne +
+                        2*uswages$mw +
+                        3*uswages$so +
+                        4*uswages$we)
+uswages$region <- factor(uswages$region)
+levels(uswages$region) <- c("ne","mw","so","we")
+
+# delete the four regions ne, mw, so, we
+uswages <- subset(uswages,select=-c(ne:we))
+
+# Take care of NAs
+uswages <- na.omit(uswages)
+```
+
+```{r}
+# load data
+data("uswages")
+
+# manipulating data
+# we see that exper has neg. values
+uswages$exper[uswages$exper <0] <-NA
+
+# convert race, smsa, and pt to factor variables
+uswages$race <- factor(uswages$race)
+levels(uswages$race) <- c("White","Black")
+uswages$smsa <- factor(uswages$smsa)
+levels(uswages$smsa) <- c("No","Yes")
+uswages$pt <- factor(uswages$pt)
+levels(uswages$pt) <- c("No","Yes")
+
+# create region, a factor variable based on the four regions ne, mw, so, we
+uswages <- data.frame(uswages,
+                      region =
+                        1*uswages$ne +
+                        2*uswages$mw +
+                        3*uswages$so +
+                        4*uswages$we)
+uswages$region <- factor(uswages$region)
+levels(uswages$region) <- c("ne","mw","so","we")
+
+# delete the four regions ne, mw, so, we
+uswages <- subset(uswages,select=-c(ne:we))
+
+# Take care of NAs
+uswages <- na.omit(uswages)
+
+# Column names
+names(uswages)
+```
+
+
+## 1. Nonconstance variance
+
+a. Using the `uswage` data
+
+b. Produce the *Residuals vs Fitted* plot, and discuss if there may be heteroskedasticiy in the error variance.
+
+c. Produce the *Scale-Location* plot, and discuss if there may be heteroskedasticiy in the error variance.
+
+d. Perform the approximate test of noncontant error variance.
+
+```{r}
+# Answers
+# a.
+m <- lm(wage ~ educ + exper + race + smsa + pt + region, data = uswages)
+par(mfrow=c(1,2))
+# b. Plot does indicated that the error variance gets larger as the fitted values get larger.
+plot(fitted(m), residuals(m), xlab="Fitted", ylab="Residuals", main = "Residuals vs Fitted")
+abline(h=0)
+# c. Plot does indicated that the error variance gets larger as the fitted values get larger.
+plot(fitted(m), abs(residuals(m)), xlab="Fitted", ylab="|Residuals|", main = "Scale-Location")
+par(mfrow=c(1,1))
+# d. P-value of F test is 6.53e-14 which reject constance variance of errors.
+summary(lm(abs(residuals(m)) ~ fitted(m)))
+```
+
+## 2. Non-normal errors
+
+a. Plot the Normal Q-Q Plot and Histogram of the residuals from model m Exercise 1. Do they indicate non-normal errors?
+
+b. Perfrom the Shapiro-Wilk test of normality for the residuals of model m. What is the P-value and what does it say about normality?
+
+c. Find the optimal Box-Cox power transform and apply it to `wage`, refit model m, replot Normal Q-Q Plot and perform the Shapiro-Wilk test of normality again. Did the Box-Cox Power Transform work?
+
+```{r}
+# Answers
+# a. Yes, plots indicate non-normal errors
+par(mfrow=c(1,2))
+qqnorm(residuals(m), ylab="Residuals")
+qqline(residuals(m)) 
+hist(residuals(m)) 
+par(mfrow=c(1,1))
+# b. P-value is 8.69e-50 and less than 0.05, so the errors are not normal
+(sw <- shapiro.test(residuals(m)))
+sw$p
+# c. Here the Power Transform does not seem to work, as there are too many outliers still present and the Sharpiro-Wilk test rejects normal errors.
+(lam <- powerTransform(m)$lambda)
+mlam <- lm(wage^lam ~ educ + exper + race + smsa + pt + region, data = uswages)
+qqnorm(residuals(mlam), ylab="Residuals Box-Cox-Transform")
+qqline(residuals(mlam)) 
+(sw <- shapiro.test(residuals(mlam)))
+sw$p
+```
+
+## 3. Exercise - Influential outliers
+
+a. Produce the influence plot for model m. Are there any really large CookD values?
+
+b. Produce the half-normal plot of the leverage values. Are they any high leverage data points?
+
+c. Produce the half-normal plot of the Cook's distance. Are they any high Cook's distance  points?
+
+d. Fit model  excluding observation with largest Cook???s Distance. Do the coeficients change? Are there any coeficients with notable changes? 
+
+e. Produce the omnibus diagnotic plot for model m. Which observation consistantly stands out as an outlier-influential point in all four plots?
+
+```{r}
+# a. Yes 
+#       StudRes    Hat    CookD
+# 6591     0.11 0.0206 2.81e-05
+# 15387   20.15 0.0162 6.16e-01
+influencePlot(m)
+# b. Yes. Obs 437 and 532
+halfnorm(lm.influence(m)$hat, ylab="Leverages")
+# c. Yes. Obs 1545, 1017, 1550
+cook <- cooks.distance(m)
+halfnorm(cook,3,ylab="Cook's distance")
+# d. Yes. Coef of regionso changes sign!
+m1 <- lm(wage ~ ., uswages, subset=(cook < max(cook)))
+compareCoefs(m1, m)
+# e. Observation 15387
+# oldpar <- par(mfrow=c(2,2))
+# plot(m)
+# par(oldpar)
+```
+
+## 4. Model structure
+
+a. Produce the CERES plots for model m. Do the factor varibles stop the plots from printing?
+
+b. How many plots are there? Why these?
+
+c. Do the plots indicate a polynomial model should be considered?
+
+
+```{r}
+# a. No. Factors are skipped.
+ceresPlots(m, terms= ~ .)
+# b. Two for educ and exper, because they are numeric variables
+# c. No
+```
+
+## 5. Interaction model
+
+a. Fit an interaction model using the  `region` and the two numeric variables. Is the model useful?
+
+b. Test the interaction model versus model m. What is the p-value and which model does it indicate?
+
+```{r}
+# a. Yes. P-value <2e-16
+m_interaction <- lm(wage ~ educ + exper + race + smsa + pt + region + educ*region + exper*region, data = uswages)
+summary(m_interaction)
+# b. P-value = 0.022 less than 0.05, choose interaction model.
+anova(m, m_interaction)
+```
+
+## 6. Collinearity
+
+a. Find the variance inflation factors for model m.
+
+b. Do they indicate collinerairty in the predictors?
+
+```{r}
+#  a. 
+vif(m)
+#  b. No, all less than 10.
+```
