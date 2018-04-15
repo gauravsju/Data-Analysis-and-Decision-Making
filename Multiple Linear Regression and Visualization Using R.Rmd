@@ -1,0 +1,399 @@
+---
+title: "Multiple Linear Regression and Visualization Using R"
+author: "Jayendra Bhardwaj"
+
+---
+
+
+
+# Part A: Multiple Linear Regression
+
+### Load the ToyotaPrices dataset
+
+Convert the ToyotaPrices dataset to a cvs file type and load it into R. 
+
+```{r}
+setwd("/Users/jayendra/Desktop")
+myData <- read.csv('ToyotaPrices.csv', header=T)
+```
+
+Here are the variable names. If you get more than these, go back to Excel, cut-and-paste the actual table of data into a new worksheet before saving into a csv file.
+
+```{r}
+names(myData)
+```
+
+### Subsetting
+
+Many times a dataset will have a great number of variables making analysis of a large dataset difficult. Here is a method to create a dataset that is a subset of the variables. The R command  is `base::subset`. For example, to subset the variables `Price`, `KM`, `Weight`, `Tow_Bar`:
+
+```{r}
+myData_PKWT <- subset(myData, select = c(Price, KM, Weight, Tow_Bar))
+head(myData_PKWT)
+```
+
+To eliminate a variable **X1** from a dataframe, use the parameter **select = -X1**; or to eliminate two or more variables, e.g. **X1** and **X2**, use **select = -c(X1, X2)**. For example,
+
+```{r}
+myData_PKW <- subset(myData_PKWT, select = -Tow_Bar)
+head(myData_PKW)
+```
+
+To obtain more information about subsetting, use the command subset.
+
+### Exploratory Data Analysis
+
+## Exercise: Data Summary
+Obtain the summary table of all the variables in `myData_PKWT`. From inspection of the median and the mean, do any of the variables show skewness? Which ones?
+
+```{r}
+names(myData)
+summary(myData)
+```
+
+## Exercise: Density-Plot, Sort-Plot, QQ-Plot
+Obtain density plots, sort plots, normal probability QQ-Plot of Price and KM. Fron the patterns in these graphs, are any of the variables skewed?  Which are and which are not? Are any variables normally distributed? Which are and which are not?
+
+```{r}
+oldpar <- par(mfrow=c(3,2))
+plot(density(myData$Price), main = "Price")
+plot(density(myData$KM), main = "KM")
+plot(sort(myData$Price))
+plot(sort(myData$KM))
+qqnorm(myData$Price)
+qqline(myData$Price, col = "pink")
+qqnorm(myData$KM)
+qqline(myData$KM, col = "pink")
+par(oldpar)
+```
+
+## Exercise: Recode a categotical variable as a factor
+
+Convert Tow_Bar to a factor with yes, no levels. Show the results.
+
+```{r}
+myData$Tow_Bar <- factor(myData$Tow_Bar)
+levels(myData$Tow_Bar) <- c("No", "Yes")
+```
+
+### Exercise: Price vs Tow_Bar
+Obtain a boxplot of `Price` versus `Tow_Bar`. How are the two boxplots different? Does `Tow_Bar` appear to predict `Price`?
+
+### Exercise: KM vs Tow_Bar
+Obtain a boxplot of `KM` versus `Tow_Bar`. How are the two boxplots different? Does `Tow_Bar` appear to predict `KM`? 
+
+### Exercise: Explain the pattern 
+Can you explain why we the direction of prediction on `price`? 
+
+```{r}
+oldpar <- par(mfrow=c(1,2))
+plot(Price~Tow_Bar, data=myData)
+plot(KM~Tow_Bar, data=myData)
+par(oldpar)
+```
+
+```{r}
+oldpar <- par(mfrow=c(1,2))
+stripchart(Price ~ Tow_Bar, data=myData, method = "jitter", vertical = TRUE, xlab="Tow Bar")
+stripchart(KM ~ Tow_Bar, data=myData, method = "jitter", vertical = TRUE, xlab="Tow Bar")
+par(oldpar)
+```
+
+### Scatterplot Matrix 
+The `pairs` function produces a scatterplot matrix. For example, to get the output variable in the first row, assuming the numeric variables are *Y*, *X1*, and *X2*, use 
+
+```
+pairs(~ Y + X1 + X2, data = myData)
+```
+
+By plotting points with colors determined by the levels of a factor, it is possible to represent 3-dimensional relationships. E.g. to include a factor *T* into a scatterplot or scatterplot matrix between numeric variables, use 
+
+```
+plot(Y ~ X1, data = myData, col = myData$T)
+```
+
+or
+
+```
+pairs(~ Y + X1 + X2, data=myData, col = myData$T)
+```
+
+### Exercise: Basic scatterplot matrix
+Obtain a scatterplot matrix  of `Price`, `KM` and `Weight`. Discuss the plot. What sort of function would likely fit the expected value function of `Price`? Does `KM` and `Weight` appear to be redundant? Are their any ouliers in the plots; if so what are they?
+
+```{r}
+pairs(~ Price + 
+        KM + 
+        Weight, 
+        data = myData)
+```
+
+### Exercise: Scatterplot matrix with factor information
+Obtain a scatterplot matrix of `Price`, `KM`, and `Weight` with the points colored by the levels of `Tow_Bar`. Discuss the plot. Does it appear that the relation between `Price` and `KM` is the same or different for cars with or without a tow bar? I.e., are there any clear relationship visible that appear to be different for groups of cars with or without a tow bar?
+
+```{r}
+# plot(Price~KM, data=myData, col = myData$Tow_Bar)
+pairs(~ Price + 
+        KM + 
+        Weight, 
+      data=myData, 
+      col = myData$Tow_Bar)
+```
+
+### Multiple regression model
+We use linear regression models to explore how the price of a car is related to the kilometers and weight for cars with and without a tow bar
+
+## Exercise: Fit the model
+Fit `Price` against `KM` and `Weight` and `Tow_Bar`.
+
+>$$
+Price = \beta_0 + \beta_1 KM + \beta_2 Weight + \beta_3 TowBar + \epsilon
+$$
+
+```{r}
+g <- lm(Price ~ KM + Weight + Tow_Bar, myData)
+```
+
+Obtain the model summary. 
+
+```{r}
+summary(g)
+```
+
+## Exercise: Residual five-number summary
+Discuss the residual five-number summary. Do the residuals appear to be skewed?
+
+## Exercise: Intercept
+Discuss the intercept coefficient. What does it tell us?
+
+```{r}
+coef(g)
+```
+
+## Exercise: Signs of the slope coeffcients
+Discuss the signs of the slope coeffcients. Do they make sense?
+
+## Exercise: `Price` vs `KM`
+How does the price of the car change as `KM` increases? Does the price go up or down? How much? Does this make sense?
+
+## Exercise: Price vs Weight
+How does the price of the car change as `Weight` increases? Does the price go up or down? How much? Does this make sense?
+
+## Exercise: Price of a Tow_Bar
+What is the Euro-price difference between Toyotas with and without the Tow_Bar automobile accessory for cars with the same KM and Weight? This does this value make sense?
+
+## Exercise: The Coefficient of Determination, $R^2$
+Obtain $R^2$. Is is a measure of the Goodness-of-Fit of the model. Is this value indicate a good fitting model, or not?
+
+```{r}
+summary(g)$r.square
+```
+
+### Using residuals and fitted values:  Visualization Analysis of Goodness-of-Fit
+
+In the following, we will discuss how well the model of the previous exercise fits the data by graphical means.
+
+## Exercise: Get $R^2$ using fitted values
+$R^2$ indicates the correlation between the `Price` observations and their fitted values. Obtain $r$, the Pearson correlation between `Price` and the `Fitted Values`, then square it. Verify that this value is equal to the $R^2$ value found in the model summary.
+
+```{r}
+r <- cor(myData$Price, g$fitted.values)
+r^2
+summary(g)$r.square
+```
+
+
+## Exercise: Fit Plot
+Obtain the Fit Plot, with a 45 degree diagonal line. Do the fitted values from this model predict the actual prices well?
+
+```{r}
+gg <- lm(myData$Price ~ fitted.values(g))
+summary(gg)
+plot(fitted.values(g), myData$Price, 
+     main = "Fit Plot",
+     xlab = "Fitted Value",
+     ylab = "Output")
+abline(coef(gg), lty = 5)
+```
+
+# Part B: Residuals and Transforms
+
+## Exercise: Residuals vs Fitted Plot
+Obtain the **Residuals vs Fitted Plot** of the fitted model with an added horizontal line at $y = 0$. Do the points look randomly distributed about the line?
+
+```{r residual_plot, echo=T, eval=T}
+plot(g$fitted.values, g$residuals, 
+     main = "Residual Plot",
+     xlab = "Fitted Value",
+     ylab = "Residuals")
+abline(0, 0, lty = 5)
+```
+
+## Exercise: Standardized Residuals vs Fitted Plot
+Repeat the Residuals vs Fitted Plot using z-scores of the  residuals. Add empirical rule horizontal lines at $+2$ and $-2$. Use these lines to judge whether or not the residuals are normal or there are outliers. Point out any outliers. Point out any floor or ceiling effects. Do you think the residuals are normal?
+
+```{r}
+oldpar = par(mfrow = c(1,2))
+plot(g$fitted.values, myData$Price, 
+     main = "Fit Plot",
+     xlab = "Fitted Value",
+     ylab = "Response"
+     )
+abline(0, 1, lty = 5)
+
+plot(scale(g$fitted.values), scale(g$residuals),
+     main = "Residual Plot",
+     xlab = "Fitted Value",
+     ylab = "Residuals"
+     )
+abline( 0,0, lty = 5)
+abline(+2,0, lty = 5)
+abline(-2,0, lty = 5)
+oldpar
+# There are (at least) three outliers.
+# Clearly the plot shows the "floor effect" .
+# With added +-2 st. dev. lines, there are too many high-value points , so we conclude that the residuals are not normally distributed.
+```
+
+## Exercise:  Residual Normal QQ-Plot
+Obtain the normal probability QQ-Plot of the residuals. 
+Do the residuals look normal?
+
+```{r}
+qqnorm(g$residuals)
+qqline(g$residuals)
+```
+
+### Composite Goodness-of-Fit Plots
+We use the following code to produce the **composite** goodness-of-fit plots. (`g` is the fitted model object.)
+
+```
+plot(g)
+```
+
+The composite methods produces four plots:
+
+- Residuals vs Fitted Plot
+- Normal QQ-Plot
+- Scale-Location Plot
+- Residuals vs Leverage Plot
+
+## Exercise: Composite goodness-of-fit plots
+Obtain the composite goodness-of-fit plots for the fitted model. What plots involve the residuals? Do the **Residuals vs Fitted Plot** and the **Normal QQ-Plot** look about the same as those obtained earlier?
+
+```{r}
+oldpar <- par(mfrow=c(2,2))
+plot(g, mfrow = c(2, 2), main = "Original")
+oldpar
+```
+
+### Outliers
+We examine the **Residuals vs Leverage Plot** in the **composite** goodness-of-fit plots. Outliers points will be identified by their row name. Are there any outliers? If so, what are their row names. 
+
+```{r}
+outliers <- c(110, 602, 1432)
+```
+
+### Method to remove outliers
+There are several methods for working with a subset of observations. For removing outliers this is one way. Suppose outliers is a vector of the row names of the identified outliers.
+
+```{r}
+myData_2 <- myData
+
+myData_2$KM[outliers] <- NA
+
+myData_2 <- na.omit(myData)
+```
+
+
+
+## Exercise: Remove outliers, refit model
+Remove the outlier cases from the dataframe, re-fit the model, and plot the composite plots. Discuss the results. Are there any improvements?
+
+```{r}
+myData_2 <- myData
+myData_2$KM[outliers] <- NA
+myData_2 <- na.omit(myData)
+g2 <- lm(Price ~ KM + Weight + Tow_Bar, data = myData_2)
+oldpar <- par(mfrow=c(2,2))
+plot(g2, mfrow = c(2, 2), main = "Outliers Removed")
+oldpar
+```
+
+### Transforming the Response Variable
+
+In the previous exercises, the scatterplots and boxplots were obtained for `Price` and `KM`. Due to the right-skewness of their distributions, a $log$ transformation of the variables is suggested provided all the values are positive and non-zero. In case of zero values, a  square root transformation may substitute for the logarithm. Such transformations may provide a better fitting model. 
+
+## Exercise: Boxplot after transform
+Obtain boxplots of `log(Price)` and `log(KM)` against `Tow_Bar`. Does the transformation remove the skewness?
+
+```{r boxplot_log, echo=T, eval=T}
+oldpar <- par(mfrow=c(1,2))
+plot(log(Price)~Tow_Bar, data=myData)
+plot(log(KM)~Tow_Bar, data=myData)
+par(oldpar)
+```
+
+## Exercise: Scatterplot Matrix after transform
+Obtain the scatterplot matrix of `log(Price)`, `log(KM)`, and `Weight`. Are there any clear relationship visible?
+
+```{r}
+pairs(~ log(Price) + 
+        log(KM) + 
+        Weight, 
+      data=myData)
+```
+
+## Exercise: Scatterplot Matrix with factor after transform
+Obtain the scatterplot matrix of of `log(Price)`, `log(KM)`, and `Weight` by plotting the points with colors determined by `Tow_Bar`. Are there any clearly visible relationships  that appear to be different for groups of cars with and without a tow bar?
+
+```{r}
+pairs(~log(Price)+log(KM)+Weight, data=myData, col = myData$Tow_Bar)
+```
+
+
+## Exercise: Fit the model with the log transform
+Re-fit the model using `log(Price)` against `log(KM)`, `Weight` and `Tow_Bar`. 
+
+```{r}
+# names(myData)
+# plot(log(Price)~log(KM), data=myData, col=Tow_Bar)
+g1 <- lm(log(Price)~log(KM)+Weight+Tow_Bar, myData)
+```
+
+Obtain the summary of the model. Does this model appear to fit better than the original model?
+
+```{r}
+summary(g1)
+```
+
+## Exercise: $R^2$ after transform
+What is the $R^2$ and is it reasonable? Based on this values, is this transfrom model better or worse than the original model?
+
+```{r}
+summary(g1)$r.square
+```
+
+
+## Exercise: Change in `log(Price)` due to `Tow_Bar`
+What is the change in `log(Price)`  due to changing the levels of `Tow_Bar` from No to Yes? (This is the percentage change in `Price`.)
+
+```{r}
+coef(g1)[4]
+```
+
+
+## Exercise: Composite goodness-of-fit
+Obtain the composite goodness-of-fit plots for the transformed model. Discuss the results. Are there improvements to the randomness of the **residual plot** due to taking logarithms? Are there improvements to the normality of the residuals due to taking logarithms? Are there any outliers, if so what are their row names?
+
+```{r}
+oldpar <- par(mfrow=c(2,2))
+plot(g1, mfrow = c(2, 2), main = "Transform LOG")
+oldpar
+```
+
+```{r}
+myDataSubset <- subset(myData, select = c(Price, KM, Weight))
+myDataSubsetScaled <- data.frame(scale(myDataSubset)) 
+stripchart(myDataSubsetScaled)
+```
