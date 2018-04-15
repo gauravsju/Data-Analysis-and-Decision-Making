@@ -1,0 +1,542 @@
+---
+title: "Remedies for Error Problems using R"
+author: "Jayendra Bhardwaj"
+---
+
+
+```{r}
+library("faraway")
+library("car")
+library("rgl")
+library("MASS")
+library("quantreg")
+library("robustbase")
+```
+
+# Remedy for correlated errors: Generalized Least Squares
+
+- When errors are not independent or have non-zero correlation, OLS is the wrong type of analysis.
+- Generalized Least Squares (GLS) accounts for dependent errors.
+- The errors have to obey special situations, but these cover a wide array of circumstances.
+- Valid inferences require that errors are normally distributed.
+- Let us demonstrate on the *longley* data.
+
+```{r}
+library(faraway)
+data("longley")
+```
+
+
+
+#Plotting the data
+
+- The aim is to build a model for Employed with just the predictors GNP and Population.
+- We will also use Year as predictor, but we will use it in an indirect way.
+
+```{r}
+data(longley)
+plot(longley)
+```
+
+- We can narrow down the set of predictors 
+- We can use the `pairs()` function as follows.
+
+```{r}
+pairs(~Employed+GNP+Population+Year, longley)
+```
+
+- It appears that all variables are highly correlated with each other.
+- Consider the times series Employed as a response variable, it appears to have a simple linear dependence on Year, but it would be a mistake to think Employed has a simple statistical linear relation with Year. Rather, Employed is a time series, and the value for one year depends on the values for the prior years.
+- Can we fit a statistical linear model for the response Employed with GNP and Population as predictors in spite of the collinearity?
+- The answer will be yes, but we must also fit a time series model for the errors.
+- Before we discuss a time series model for the errors, let's introduce some tools used in time series modelling.
+
+## The Auto Correlation Function (ACF)
+
+- The Auto Correlation Function is an array of correlations of a time series with itself for $k$ lagged value of time, as $k=1,...,n-2$.
+
+```{r}
+with(longley, cor(Employed[-1],Employed[-16]))
+```
+
+- A graph of the ACF along with 95% CI's for each $\hat{\rho}_{k}$ is useful for understanding the structure of a times series.
+- We graph the ACF's of all the variables.
+
+```{r}
+par(mfrow=c(2,2))
+acf(longley$Employed)
+acf(longley$GNP)
+acf(longley$Population)
+par(mfrow=c(1,1))
+```
+
+- In the ACF of Employed, clearly the first two lagged auto correlations are statistically different from zero.
+- Also, it appears that both GNP and Population* have the same auto correlation structure as does Employed.
+- This is so because all three variables have a strong linear dependence on Year.
+
+## OLS Fit
+
+- Suppose we fit a linear model in GNP and Population.
+
+```{r}
+g <- lm(Employed~GNP+Population, longley)
+summary(g)
+shapiro.test(residuals(g))
+car::durbinWatsonTest(residuals(g))
+car::vif(g)
+par(mfrow=c(2,2))
+plot(g)
+par(mfrow=c(1,1))
+```
+
+- In the four anomaly plots, we see that there is a sinusoidal pattern in the residuals against the fitted values, which is a clear indication that the residuals are not independent.
+- Let's plot the residuals against Year.
+
+```{r}
+library(ggplot2)
+qplot(longley$Year, residuals(g)) + 
+  geom_line() + 
+  geom_smooth(se=F) +
+  geom_hline(yintercept=0)
+```
+
+## AR(1) Timeseries Model
+
+- Let's have a look at the ACF of the residuals
+
+```{r}
+acf(residuals(g))
+```
+
+- We see that the lag(1) auto correlation of residuals is almost significant even after controlling for GNP and Population.
+- A time series with a strong lag(1) auto correlation can be modeled with an AR(1) autoregression model:
+
+## GLS Fit using Maximum Likelihood
+
+- A maximum likelihood procedure for fitting a linear model with normal, but correlated, errors following an auto regression model is easily obtained.
+- It is available in the R Package nlme "Linear and Nonlinear Mixed Effects Models".
+
+
+```{r}
+library(nlme)
+library(car)
+g1 <- gls(Employed~GNP + Population, 
+          correlation=corAR1(form= ~Year), 
+          data=longley)
+summary(g1)
+shapiro.test(residuals(g1))
+intervals(g1)
+compareCoefs(g, g1)
+```
+
+- We see that the GLS estimated model is different from OLS model.
+- A plot of the GLS residuals against Year reveals the same pattern as OLS residuals.
+
+```{r}
+qplot(longley$Year, residuals(g1)) + 
+  geom_line() + 
+  geom_smooth(se=F) +
+  geom_hline(yintercept=0)
+```
+
+- A plot of the ACF of the GLS residuals reveals the same structure as the OLS residuals.
+- Note the R nlme package, the function ACF() is different than the standard acf() function and needs to be plotted.
+
+```{r}
+plot(acf(g1), alpha = 0.10)
+```
+
+# Remedy for non constant error variance: Weighted Least Squares
+
+- When the errors are uncorrelated but have non constant variance, we can use *weighted least squares*. 
+- Errors must be normal.
+- The WLS estimates of the coefficients with model (design) matrix $\boldsymbol{X}$ is readily obtained by modifying the OLS method:
+
+### 1981 French Presedential Election regression data 
+
+- We will demonstrate with the fpe data in the faraway package.
+
+```{r}
+library(faraway)
+data(fpe)
+```
+### Modeling the data
+
+- Here we want to build a model to predict the number of votes the leading candidate (Mitterrand) gets in the second round.
+- A matrix scatterplot with $A2\quad$ votes for Mitterrand in the second round as the output:
+
+```{r}
+pairs(~A2+A+C+D+E+F+N, fpe)
+```
+
+
+- In the above model we absorb the unknown shifts in votes from first to second round into the coefficients and the errors.
+- So if Mitterrand gets all the votes in one district, then the vote variables of all the other candidates must be zero, the fitted value would be roughly the number of actual voters in that district (assuming everyone voted).
+- Fit a model without an intercept using OLS .
+- In R, this is done using the notation *-1*.
+
+```{r}
+g1 <- lm(A2 ~ A + B + C + D + E + F + G + H + J + K + N -1, fpe)
+par(mfrow=c(2,2))
+plot(g1)
+par(mfrow=c(1,1))
+```
+
+- Fit a model without an intercept using WLS 
+- Use $weight = 1/EI$
+- Compare coefficients.
+
+```{r}
+library(car)
+g2 <- lm(A2 ~ A+B+C+D+E+F+G+H+J+K+N-1, fpe, weight=1/EI)
+compareCoefs(g1, g2)
+```
+
+- Model fit is the same for all sets of weights satisfying the same proportionality. 
+
+```{r}
+g3 <- lm(A2 ~ A+B+C+D+E+F+G+H+J+K+N-1, fpe, weight=53/EI)
+compareCoefs(g1, g2, g3)
+```
+
+- Constrain the coefficients:
+    + Set coefficients for *B* and *H* equal to zero.
+    + Set coefficients for *A*, *G*, and *K* equal to one.
+
+```{r}
+g4 <- lm(A2 ~ offset(A+G+K)+C+D+E+F+N-1, fpe, weight=1/EI)
+compareCoefs(g1, g2, g3, g4)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(g4)
+par(mfrow=c(1,1))
+shapiro.test(residuals(g4))
+```
+
+
+## WLS Fit using the savings data
+
+- Use the savings data from the faraway package.
+- Use weights two ways: proportional to 
+    + $\nicefrac{1}{pop15}$
+    + $\nicefrac{1}{pop15^{2}}$
+- Are there any differences in the estimated coefficients?
+
+```{r}
+library(faraway)
+data(savings)
+g1 <- lm(sr ~ pop15 + pop75 + dpi + ddpi, savings)
+g2 <- lm(sr ~ pop15 + pop75 + dpi + ddpi, savings, weight=1/pop15)
+g3 <- lm(sr ~ pop15 + pop75 + dpi + ddpi, savings, weight=1/(pop15^2))
+compareCoefs(g1, g2, g3)
+```
+
+
+# Remedy for Incorrect Model Structure: Test of Lack of Fit
+
+- We have previously presented use of the partial regression plots to diagnose problems with the model structure.
+- We present a statistical hypothesis test about whether or not the model actually fits the data.
+- The method is called testing for lack of fit.
+- It cannot be performed with just any dataset.
+- The dataset must contain some replication of outcomes with the same configuration of input variables.
+- Replication can happen by chance, or can be built into the design of an experiment.
+
+## Testing for Lack of Fit
+
+- The following works if we have replications of the response variables at several values of the input variables.
+- In our example, we will see that even though a model may enjoy a high value of $R^2$, the model still may not fit the data.
+- The statistical method relies on the estimate of the error variance $\sigma^2$ that comes from the residuals of the fitted model.
+- The estimate of this variance is the mean squared error $MSE=\frac{SSE}{n-p}$.
+- If the model does not fit the data, its  MSE will over-estimate $\sigma^2$.
+- If we have replication in the dataset, we can compute another independent estimate of $\sigma^2$. 
+- Then the $MSE$ will be compared to this independent estimate of $\sigma^2$ that comes from replicating the observations.
+- In experimental design, we called this a replication experiment, and it means that the response is observed several times for different values of the predictor variables. 
+- In case there are multiple predictors, the response is observed several times for the same combination of values for the predictor variables.
+
+## Corrosion loss in Cu-Ni alloys
+
+- Here is an example involving the test of fit of a stright line when the model should be an unspecified curved line.
+```{r}
+library(faraway)
+data(corrosion)
+```
+
+- A plot of the data reveals several values of the predictor where two or more replications of the response have been taken.
+
+```{r}
+(p <- qplot(Fe, loss, data=corrosion) + 
+  labs(x="Iron content", y="Weight loss", title="Corrosion"))
+```
+
+- We fit a simple linear model to the data.
+
+```{r}
+g1 <- lm(loss ~ Fe, corrosion)
+sum.g1 <- summary(g1)
+```
+
+- We see that the model predicts that for a one percent increase in Iron content, there will be a `r -g1$coef[2]` decrease in Weight loss.
+- Moreover, this model enjoys an $R^2$ equal to `r round(summary(g1)$r.squared,2)`
+- The *MSE* is the square of the "Residual standard error": `r summary(g1)$sigma`
+- We graph a straight line fit to the data.
+
+```{r}
+(p + geom_smooth(method = "lm", formula = y~x, colour="red", se=F))
+```
+
+- For comparison, we fit a smooth nonparametric curve to the data.
+- It appears that the "green dragon" is not content to lie along the straight line.
+
+```{r}
+(p  + geom_smooth(method = "lm",    formula = y~x, colour="red",   se=F) +
+      geom_smooth(method = "loess", formula = y~x, colour="green", se=F))
+```
+
+- This model is extremely easy to fit in R.
+- Since the predictor `Fe` has just a few unique values, it is safe to treat it as a categorical variable.
+- We do this eaisly in R with the function `factor()`
+
+```{r}
+ga <- lm(loss ~ factor(Fe), corrosion)
+summary(ga)$sigma
+```
+
+- Just like any linear model, we have fitted values, `predict(ga)`.
+- The fitted values for the group means model are the group means (duh!).
+- We add the group means to the graph.
+
+```{r}
+(p +  geom_smooth(method = "lm",    formula = y~x, colour="red",   se=F) +
+      geom_smooth(method = "loess", formula = y~x, colour="green", se=F) +
+      geom_point(x=corrosion$Fe, y=predict(ga), size = 4))
+```
+
+- Now test the fit of the *straight line model* (small model) with the *group means model* model (big model).
+
+
+```{r}
+anova(g1,ga)
+```
+
+- The small model is the null hypothesis: $H_0: E(loss)=\beta_0+\beta_1Fe$
+- Conclusion of the test of fit: Reject the $H_0:$ straight line model,  since the P-value is less than $\alpha=0.05$
+- Now we test the fit a polynomial model order 3.
+
+```{r}
+(p  + geom_smooth(method = "lm", formula = y ~ poly(x,3), colour="red", se=F) + 
+      geom_point(x=corrosion$Fe, y=predict(ga), size = 4))
+```
+
+```{r}
+g3 <- lm(loss ~ poly(Fe,3), corrosion)
+anova(g3,ga)
+```
+
+- Conclusion of the test of fit: Reject the polynomial(3) model
+- Now test the fit a polynomial model order 4.
+
+```{r}
+(p  + geom_smooth(method = "lm", formula = y ~ poly(x,4), colour="red", se=F) + 
+      geom_point(x=corrosion$Fe, y=predict(ga), size = 4))
+```
+
+```{r}
+g4 <- lm(loss ~ poly(Fe,4), corrosion)
+anova(g4,ga)
+```
+
+- Conclusion of the test of fit: Reject the polynomial(4) model
+- We could keep going, but what is the point of a higher order plynomial when it would clearly not be predictive of future responses?
+- We should take a clue from the nonparametric fit, as it seems to suggest a low degree sinusoidal model.
+- We leave this task to another day, but we have learned an important lesson about overfitting and about $R^2$.
+
+## $R^2$ is not a measure of model fit!
+
+- Even though all models enjoy high $R^2$, they are not adequate fits to the data.
+- $R^2$ is only good for comparing models.
+- It is possible to fit a model through the group means perfectly and get an $R^2$ almost one, but such a model is useless for predicting new responses.
+- Here we have 7 groups, so a model with 7 parameters will fit the group means perfectly.
+- A polynomial of degree 6, has 7 parameters.
+- A plot of the polynomial reveals that, while it fits the goup means perfectly, the model is not useful for prediction or interpolation.
+
+```{r}
+(p  + geom_smooth(method = "lm", formula = y ~ poly(x,6), colour=6, se=F) + 
+      geom_point(x=corrosion$Fe, y=predict(ga), size = 4))
+```
+
+```{r}
+library(faraway)
+library(MASS)
+library(robustbase)
+library(quantreg)
+data(star)
+plot(light ~ temp, star)
+abline(lm(light ~ temp, star)$coef, col=1) # LS
+abline(rq(star$light ~ star$temp)$coef, col=2) # LAD
+abline(rlm(light ~ temp, psi=psi.huber, init="lts", star)$coef, col=3) # Huber
+abline(rlm(light ~ temp,  psi = psi.bisquare, init="lts", star)$coef, col=4) #Tukey Bi-square
+abline(ltsReg(light ~ temp, star)$coef, col=5) # LTS
+legend("bottomleft", c("LS", "LAD", "Huber", "Bisquare", "LTS"), col=c(1,2,3,4,5), inset = .04, lty=1)
+```
+
+- Print estimated coefficients in a table for several regression methods.
+
+```{r}
+library(faraway)
+library(car)
+library(MASS)
+library(robustbase)
+library(quantreg)
+data(star)
+g1 <- lm(light ~ temp, data=star)
+g2 <- rlm(light ~ temp, psi=psi.huber, data=star)
+g4 <- rlm(light ~ temp,  psi=psi.bisquare, init="lts", data=star)
+g3 <- rlm(light ~ temp, psi = psi.hampel, init = "lts", data=star)
+g5 <- ltsReg(light ~ temp, data=star) # LTS
+g6 <- rq(light ~ temp, data=star) # LAD
+coefs <- compareCoefs(g1, g2, g3, g4, g5, g6, se = FALSE)
+colnames(coefs) <- c("OLS", "Huber", "Bisquare", "Hample", "LTS", "LAD")
+coefs
+```
+
+## Exercises
+
+- We analyze the *uswages* data from the *faraway* package: 
+
+```{r}
+library(faraway)
+data(uswages)
+# ?uswages
+```
+
+
+# Exercise 1
+
+- Create factors, remove NAs
+- Process the data to make factors with named levels for *race*, *smsa*, and *pt*.
+- Replace the indicator variables *ne*, *mw*, *so*, and *we* with one factor called *region* with levels named: ne*, *mw*, *so*, and *we*.
+- Remove all NAs.
+
+```{r}
+library(faraway)
+data("uswages")
+## Transform Data: Factors
+### Convert "race" factor using levels "black" and "white"
+uswages$race <- factor(uswages$race)
+levels(uswages$race) <- c("White","Black")
+### Convert "smsa" to factor using levels "yes" and "no"
+uswages$smsa <- factor(uswages$smsa)
+levels(uswages$smsa) <- c("No","Yes")
+### Convert "pt" to factor variables using levels "yes" and "no"
+uswages$pt <- factor(uswages$pt)
+levels(uswages$pt) <- c("No","Yes")
+### Create Region Factor using levels "ne", "mw", "so", "we", "pt"
+# create region, a factor variable based on the four regions ne, mw, so, we
+uswages <- data.frame(uswages,
+                      region =
+                        1*uswages$ne +
+                        2*uswages$mw +
+                        3*uswages$so +
+                        4*uswages$we)
+uswages$region <- factor(uswages$region)
+levels(uswages$region) <- c("ne","mw","so","we")
+### Delete the four regions ne, mw, so, we
+uswages <- subset(uswages,select=-c(ne:we))
+## Transform Data: Negative Values
+uswages$exper[uswages$exper <0] <-NA
+## Transform Data: Take care of NAs
+uswages <- na.omit(uswages)
+```
+
+# Exercise 2
+
+- Show that the summary of your final data is the following.
+
+```{r}
+summary(uswages)
+```
+
+# Exercise 3
+
+- Compute OLS fit to model log(wage)~.
+- Perform the Shapiro-Wilk Test of Normality for the residuals, what is the conslusion?
+
+```{r}
+g.OLS <- lm(log(wage)~., data=uswages)
+
+# par(mfrow=c(2,2))
+# plot(g.OLS)
+# par(mfrow=c(1,1))
+
+shapiro.test(residuals(g.OLS))
+
+# Answer: p-value <2e-16, reject normality of residuals
+# summary(lm(sqrt(abs(residuals(g.OLS)))~fitted(g.OLS)))
+# ceresPlots(g.OLS)
+```
+
+# Exercise 4
+
+- Compute WLS fit to model log(wage)~. and weights = 1/(1+educ) 
+- Perform the Shapiro-Wilk Test of Normality for the residuals, what is the conslusion?
+
+```{r}
+g.WLS <- lm(log(wage)~., data=uswages, weights = 1/(1+educ))
+
+# par(mfrow=c(2,2))
+# plot(g.WLS)
+# par(mfrow=c(1,1))
+
+shapiro.test(residuals(g.WLS))
+# Answer: p-value <2e-16, reject normality of residuals
+
+# summary(lm(sqrt(abs(residuals(g.WLS)))~fitted(g.WLS)))
+# ceresPlots(g.WLS)
+```
+
+# Exercise 5
+
+- Compute Robust fit to model log(wage)~. using Huber, Hampel, Biquare, LTS, and LAD
+- Compare coefficients of the above fits using OLS, WLS, Huber, Hampel, Biquare, LTS, and LAD
+- Which would you recommend?
+- Why?
+
+```{r}
+# library(faraway)
+library(car)
+library(MASS)
+library(robustbase)
+library(quantreg)
+
+g.HUB <- rlm(log(wage)~. , psi=psi.huber, data=uswages)
+g.HAM <- rlm(log(wage)~., psi=psi.hampel, data=uswages)
+g.BIS <- rlm(log(wage)~., psi=psi.bisquare, init="lts", data=uswages)
+# g.MM <- rlm(log(wage)~., method="MM", data=uswages)
+g.LTS <- ltsReg(log(wage)~. , data=uswages) # LTS
+g.LAD <- rq(log(wage)~. , data=uswages) # LAD
+
+tab <- round(compareCoefs(g.OLS,g.WLS,g.HUB,
+                    g.HAM,g.BIS,g.LTS,
+                    g.LAD,
+                    se=FALSE, print=FALSE),
+             3)
+colnames(tab) <- c("g.OLS","g.WLS","g.HUB",
+                   "g.HAM","g.BIS","g.LTS",
+                   "g.LAD")
+tab
+
+# Answer: 
+# 
+# At the time of this data, people made less money in the South than any other region of the US. OLS gets the effect for regionso wrong: It says the wage is approximately 1% higer than the Northeast.
+# 
+# (Since the indicator for Northeast is missing under the list of coefficients, Northeast is the base category.) 
+# 
+# All the Robust estimators don't make this mistake and get a negative value for the effect for the South. 
+# 
+# Since LTS has the best breakdown point, LTS is the safest method and would be the best choice. 
+# 
+# Here LTS results say the wage effect in the South is 3.5% lower then the Northeast.
+```
+
