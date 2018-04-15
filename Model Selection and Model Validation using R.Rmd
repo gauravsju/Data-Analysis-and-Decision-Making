@@ -1,0 +1,458 @@
+---
+title: "Model Selection and Model Validation using R"
+author: "Jayendra Bhardwaj"
+---
+
+
+
+```{r}
+library("printr")
+library("car")
+library("graphics")
+# library("YaleToolkit")
+library("ggplot2")
+```
+
+
+```{r}
+library("MASS")
+library("quantreg")
+library("faraway")
+library("robustbase")
+```
+
+#  Model selection: One-at-a-time method
+- This section is to introduce the concepts of automated model-building. 
+- It is based on using the partial F-test or its equivalent, the t-test for testing one coefficient. 
+- This example's purpose is for teaching the method, so the R code here is not what you will wind up using. 
+- For automated model building, you will be using stepwise regression which is introduced in the next section.
+- We introduce this concept using a dataset called **state.x77** which comes with the base R installation. - We use it to predict life expectancy for each USA State using various state-wide predictors.
+
+```{r}
+data(state)
+statedata <- data.frame(state.x77, row.names = state.abb)
+names(statedata)
+```
+
+- First we start with the biggest model, and then eliminate variables one at a time.
+- At each step, if there are any p-values great than 0.05, we eliminate the variable that has the highest p-value and re-fit the reduced model.
+- This is called the *Backward Elimination Stepwise Regression*.
+
+- **Step 0**:
+- We will fit a model using all predictors and store it in `g1`.
+
+```{r}
+g1 <- lm(Life.Exp ~ ., data=statedata)
+summary(g1)
+```
+
+- **Step 1**:
+- We eliminate `r names(sort(summary(g1)$coef[,4], decreasing = TRUE)[1])`, since it has the highest p-value.
+- Next we re-run the model without this variable and store it in `g2`.
+
+```{r}
+g2 <- update(g1, . ~ . - Area)
+summary(g2)
+```
+
+- Step 2:
+- We eliminate `r names(sort(summary(g2)$coef[,4], decreasing = TRUE)[1])`, since it has the highest p-value.
+- Next we re-run the model without this variable.
+- We reuse `g2` to store the resulting model.
+
+```{r}
+g2 <- update(g2, . ~ . - Illiteracy)
+summary(g2)
+```
+
+- Step 3:
+- We eliminate `r names(sort(summary(g2)$coef[,4], decreasing = TRUE)[1])`, since it has the highest p-value.
+- Next we re-run the model without this variable.
+- We reuse `g2` to store the resulting model.
+
+```{r}
+g2 <- update(g2, . ~ . - Income)
+summary(g2)
+```
+
+- Step 4:
+- We eliminate `r names(sort(summary(g2)$coef[,4], decreasing = TRUE)[1])`, since it has the highest p-value.
+- Next we re-run the model without this variable.
+- We reuse `g2` to store the resulting model.
+
+```{r}
+g2 <- update(g2, . ~ . - Population)
+summary(g2)
+```
+
+- End of Steps
+- There are no more variables with p-values higher than 0.05.
+- The final model is stored in the object `g2`.
+
+
+# Model section: Stepwise regression
+
+- This method uses an automated algorithm. 
+- It is a search algorithm that finds the best model with optimal value of the *Akaike Information Criterion* (AIC): 
+
+$$
+AIC=p\times log(SSE/n)+constant
+$$
+
+- The AIC is derived from statistical theory and is useful in situations and models more general than OLS.
+- Clearly the objective is to minimize AIC, and this is done by finding a model with small SSE and a small number of parameters p.
+- Recall that we call always get smaller $SSE$ using a model with a larger number of parameters p.
+- But since p multiplies log(SSE/n), AIC may get bigger with larger p, unless SSE gets smaller really fast.
+- The R function step() preforms *stepwise regression*.
+
+```{r}
+g3 <- step(g1)
+```
+
+- We see that we have a qualitatively different model from the one we obtained with the one-at-a-time method.
+- This is because the stepwise method attempts to find the globally optimal model, while the one-at-a-time method cannot.
+- We should compare the models.
+
+```{r}
+compareCoefs(g1, g2, g3, se = FALSE)
+```
+
+# Conditions that have an effect on the selected model
+
+### Influential points
+
+- Influential points can have an effect on selected model. 
+- After preliminary runs with the stepwise algorithm, it is import to check if any observations are controlling the results. 
+- Recall, such observations are called **influential**.
+- We use the diagonal of the hat matrix to identify observations (records) with larger hat values, also called leverage. 
+- An observation with predictor values far from the average will have large leverage. 
+- To measure the actual change in predictions from removing individual data points, Dennis Cook developed the Cook's Distance.
+- A related measure is the Studentized Residual, which can be thought of as a z-score of the residual.
+- The y-axis is the Studentized Residual.
+- The x-axis is the leverage.
+- The size of the bubble is proportial to Cook's D.
+
+```{r}
+library(car)
+influencePlot(g1, id.method=cooks.distance(g1), id.n=4)
+```
+
+- Alaska (AK) has high leverage and Cook's D, try removing it before the fit, then perform stepwise regression.
+
+```{r}
+g4 <- lm(Life.Exp ~ ., 
+         data = statedata, 
+         subset=(state.abb != "AK")
+         )
+g4 <- step(g4)
+```
+
+- We compare coefficents of all the models so far.
+- While the same variables were eliminated, there are some movements in the coefficients with the last model.
+
+```{r}
+compareCoefs(g1, g2, g3, g4, se = FALSE)
+```
+
+### Variable transformations
+
+- Transforming variables can have an effect. 
+- Here is a way to identify non-regular variables to transform. 
+- It uses a stripchart with jitter. 
+- Before we have used boxplot.
+
+```{r}
+stripchart(data.frame(scale(statedata)), 
+           vertical = TRUE, 
+           method = "jitter")
+```
+
+- Population and Area are skewed, try transforming them. 
+- Then run stepwise using the transformed variables.
+
+```{r}
+g5 <- lm(Life.Exp ~ log(Population) + 
+           Income + 
+           Illiteracy + 
+           Murder + 
+           HS.Grad + 
+           Frost + 
+           log(Area), 
+         data = statedata)
+g5 <- step(g5)
+```
+
+- log(Area) still does not make the final list, while log(Population) does.
+- Once again we compare all the models so far.
+
+```{r}
+compareCoefs(g1, g2, g3, g4, g5, se = FALSE)
+```
+
+# Cross-Validation for Linear Models
+
+- We are now going to stress test one or more models by forcing them to perform on stage with a new audience! 
+- Our new audience will be new data that were not used in the original stepwise fit. 
+- Hope they don't get stage fright!
+
+### The CVlm() function
+
+- CVlm produces cross-validation statistics for linear models obtained with OLS or WLS fits only (not any robust fits).
+- Data are randomly partitioned. 
+- Each partition set of records is called a fold. 
+- Cross-validation of a model is performed as a portion of the data or "fold" is held out, default is 3 folds.
+- We need to install and load the DAGG package.
+- We will cross-validate our final model: 
+    + (g5) Life.Exp ~ log(Population) + Murder + HS.Grad + Frost 
+- In the plots, the small symbols show the cross-validation at predicted values on the fold that is held out.
+
+```{r}
+library(DAAG)
+CVlm(data = statedata, 
+     form.lm=g5, 
+     printit=F)
+```
+
+- We can use a different seed for choosing different random folds.
+
+```{r}
+seed <- round(runif(1, min=0, max=100))
+CVlm(data = statedata, 
+     form.lm=g5, 
+     seed=seed, 
+     printit=F)
+```
+
+For smaller datasets use larger number of folds, here we use $m = 4$ folds.
+
+```{r}
+seed <- round(runif(1, min=0, max=100))
+CVlm(data = statedata, 
+     form.lm=g5, 
+     m=4, 
+     printit=F)
+```
+
+- For two or more model we should compare the mean squared errors for prediction.
+- Let us compare all our models:
+    + (g1) Life.Exp ~ .
+    + (g2) Life.Exp ~ Murder + HS.Grad + Frost
+    + (g3) Life.Exp ~ Population + Murder + HS.Grad + Frost
+    + (g4) Life.Exp ~ Population + Murder + HS.Grad + Frost 
+    + (g5) Life.Exp ~ log(Population) + Murder + HS.Grad + Frost 
+ 
+
+```{r}
+seed <- round(runif(1, min=0, max=100))
+oldpar <- par(mfrow=c(2,3))
+mse.g1 <- CVlm(data = statedata, 
+               form.lm=g1, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g1")
+mse.g2 <- CVlm(data = statedata, 
+               form.lm=g2, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g2")
+mse.g3 <- CVlm(data = statedata, 
+               form.lm=g3, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g3")
+mse.g4 <- CVlm(data = statedata, 
+               form.lm=g4, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g4")
+mse.g5 <- CVlm(data = statedata, 
+               form.lm=g5, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g5")
+par(oldpar)
+```
+
+```{r}
+data.frame(mse.g1=attr(mse.g1, "ms"),
+           mse.g2=attr(mse.g2, "ms"),
+           mse.g3=attr(mse.g3, "ms"),
+           mse.g4=attr(mse.g4, "ms"),
+           mse.g5=attr(mse.g5, "ms"))
+```
+
+- Now we shall do a real power play.
+- We will repeat the above model comparisons ten times with different seeds.
+
+```{r}
+df <- data.frame(mse.g1=NULL, 
+                 mse.g2=NULL, 
+                 mse.g3=NULL,
+                 mse.g4=NULL,
+                 mse.g4=NULL)
+for (i in 1:10) {
+  seed <- round(runif(1, min=0, max=100))
+  oldpar <- par(mfrow=c(1,5))
+  mse.g1 <- CVlm(data = statedata, 
+               form.lm=g1, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g1")
+  mse.g2 <- CVlm(data = statedata, 
+               form.lm=g2, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g2")
+  mse.g3 <- CVlm(data = statedata, 
+               form.lm=g3, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g3")
+  mse.g4 <- CVlm(data = statedata, 
+               form.lm=g4, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g4")
+  mse.g5 <- CVlm(data = statedata, 
+               form.lm=g5, 
+               m=4, 
+               seed=seed, 
+               printit=F,
+               main = "g5")
+  par(oldpar)
+  df.temp <- data.frame(mse.g1=attr(mse.g1, "ms"),
+                        mse.g2=attr(mse.g2, "ms"),
+                        mse.g3=attr(mse.g3, "ms"),
+                        mse.g4=attr(mse.g4, "ms"),
+                        mse.g5=attr(mse.g5, "ms"))
+  df <- rbind(df,df.temp)
+}
+
+```
+
+- Summary: 
+      + We always do better than the full model (g1) or the one-at-a-time model (g2) with any of the other stepwise models (g3, g4, g5)
+      + g3 and g4 are the same model - we included both here so as not to cause confusion with the numbering
+      + It is a toss up between g4 and g5
+
+```{r}
+df
+```
+
+
+
+# Exercise
+
+Fit a stepwise model using a new dataset: Salaries for Professors. First we need to modify the dataset.
+
+```{r}
+library(car)
+data(Salaries)
+?Salaries
+```
+
+We will delete the "rownames" column after we use it to rename the rows. This is easy to see but hard to explain! Then we remove missing data. Then re-label the levels of discipline.
+
+```{r}
+Salaries$rownames <- rownames(Salaries)
+Salaries$rownames <- NULL
+Salaries.old <- Salaries
+Salaries <- na.omit(Salaries)
+levels(Salaries$discipline) <- c("Theorectical", "Applied")
+some(Salaries)
+```
+
+# Exercise 1. 
+
+Perform stepwise regression strating with the full model using all the predictors of salary.
+
+```{r}
+library(car)
+g.OLS <- lm(salary ~ yrs.since.phd + yrs.service + discipline + rank + sex, data = Salaries)
+g.OLS.step <- step(g.OLS)
+# Answer:
+#   AIC Stepwise Model: 
+#   salary ~ yrs.since.phd + yrs.service + discipline + rank
+```
+
+# Exercise 2. 
+
+Compare the coefficients of the stepwise model and the full model.
+
+```{r}
+tab <- compareCoefs(g.OLS, g.OLS.step, se = FALSE)
+colnames(tab) <- c("g.OLS", "g.OLS.step")
+tab
+# Answer:
+# Obviously different coeficients for sex variable
+# Coefficients other variables of full and step model about the same.
+```
+
+# Exercise 3. 
+
+Which variable of variables did stepwise drop from the full model?
+
+```{r}
+# We see that the variable `sex` was dropped by the stepwise procedure.
+```
+
+# Exercise 4. 
+
+Perform a cross-validation of the stepwise model.
+
+```{r}
+library(DAAG)
+num.fold <- 3 
+oldpar <- par(mfrow = c(1, 2))
+CVlm(data = Salaries, form.lm = g.OLS, m = num.fold, 
+     main = "Prediction Plot: g.OLS",
+     printit = FALSE)
+CVlm(data = Salaries, form.lm = g.OLS.step, m = num.fold, 
+     main = "Prediction Plot: g.OLS.step", 
+     printit = FALSE)
+par(oldpar)
+
+# Answer:
+# - From the prediction plots we see that:
+# + The straight lines in the plots reveal that that both OLS and OLS.step yield nearly equal expected value functions for each fold.
+# + The predictions appear good at the lower salaries, but much more error prone at the higher salaries.
+```
+
+5 Exercise. 
+
+Compare the two models using the *mse's* from the cross-validations with number of folds equal to 3.
+
+Which model gives the better *mse*?
+
+```{r}
+library(DAAG)
+num.fold <- 3 
+oldpar <- par(mfrow = c(1, 2))
+mse.g.OLS <- CVlm(data = Salaries, 
+                  form.lm = g.OLS, 
+                  m = num.fold,
+                  main = "Prediction Plot: g.OLS",
+                  printit = FALSE)
+mse.g.OLS.step <- CVlm(data = Salaries, 
+                  form.lm = g.OLS.step, 
+                  m = num.fold, 
+                  main = "Prediction Plot: g.OLS.step",
+                  printit = FALSE)
+par(oldpar)
+data.frame(mse.g.OLS=attr(mse.g.OLS, "ms"),
+           mse.g.OLS.step=attr(mse.g.OLS.step, "ms"))
+
+# Answer:
+#   
+# g.OLS is slightly better.
+```
+
